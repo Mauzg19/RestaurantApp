@@ -43,6 +43,9 @@ class Product {
     required this.icon,
     required this.accentColor,
     this.imagePath,
+    this.description,
+    this.ingredients,
+    this.allergens,
   });
 
   final String id;
@@ -52,6 +55,9 @@ class Product {
   final IconData icon;
   final Color accentColor;
   final String? imagePath;
+  final String? description;
+  final List<String>? ingredients;
+  final List<String>? allergens;
 
   String get formattedPrice => '£${price.toStringAsFixed(2)}';
 }

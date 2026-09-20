@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
 import '../../../customer/domain/entities/product.dart';
+import '../../../customer/domain/repositories/order_repository.dart';
 import '../../../customer/domain/repositories/product_repository.dart';
 import '../../domain/entities/administrator_dashboard.dart';
 import '../../domain/usecases/get_administrator_dashboard.dart';
@@ -16,12 +17,14 @@ class AdministratorHomePage extends StatefulWidget {
     required this.user,
     required this.getDashboard,
     required this.productRepository,
+    this.orderRepository,
     this.onLogout,
   });
 
   final AuthUser user;
   final GetAdministratorDashboard getDashboard;
   final ProductRepository productRepository;
+  final OrderRepository? orderRepository;
   final void Function(BuildContext)? onLogout;
 
   @override
@@ -70,20 +73,75 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
         .toList();
   }
 
-  void _advanceOrder(DashboardOrder order) {
+  Future<void> _advanceOrder(DashboardOrder order) async {
     if (order.status == OrderStatus.delivered) return;
+
+    final nextStatus = order.status.next;
+    if (widget.orderRepository != null) {
+      try {
+        await widget.orderRepository!.updateOrderStatus(
+          order.id.replaceFirst('#', ''),
+          _statusValue(nextStatus),
+        );
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo actualizar el pedido: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
     setState(
       () => _orders = _orders
           .map(
             (current) => current.id == order.id
-                ? current.copyWith(status: order.status.next)
+                ? current.copyWith(status: nextStatus)
                 : current,
           )
           .toList(),
     );
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${order.id}: ${order.status.next.label}')),
+      SnackBar(content: Text('${order.id}: ${nextStatus.label}')),
     );
+  }
+
+  Future<void> _selectTab(int index) async {
+    if (index == 1 && widget.orderRepository != null) {
+      try {
+        await widget.orderRepository!.load();
+        if (!mounted) return;
+        final dashboard = widget.getDashboard();
+        setState(() => _orders = [...dashboard.orders]);
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron cargar los pedidos: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() => _selectedTab = index);
+  }
+
+  String _statusValue(OrderStatus status) {
+    switch (status) {
+      case OrderStatus.pending:
+        return 'pending';
+      case OrderStatus.preparing:
+        return 'preparing';
+      case OrderStatus.ready:
+        return 'ready';
+      case OrderStatus.delivered:
+        return 'delivered';
+    }
   }
 
   Future<void> _showNotifications() async {
@@ -339,7 +397,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTab,
-        onDestinationSelected: (index) => setState(() => _selectedTab = index),
+        onDestinationSelected: _selectTab,
         backgroundColor: Colors.white,
         indicatorColor: AppTheme.accent,
         destinations: const [

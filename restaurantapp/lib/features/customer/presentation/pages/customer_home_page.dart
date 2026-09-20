@@ -4,10 +4,15 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
+import '../../data/repositories/order_repository_impl.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/order_repository.dart';
+import '../../domain/repositories/user_settings_repository.dart';
 import '../../domain/usecases/get_products.dart';
+import 'customer_orders_page.dart';
+import 'customer_details_page.dart';
+import 'product_detail_page.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({
@@ -15,12 +20,14 @@ class CustomerHomePage extends StatefulWidget {
     required this.user,
     required this.getProducts,
     this.orderRepository,
+    this.settingsRepository,
     this.onLogout,
   });
 
   final AuthUser user;
   final GetProducts getProducts;
   final OrderRepository? orderRepository;
+  final UserSettingsRepository? settingsRepository;
   final void Function(BuildContext)? onLogout;
 
   @override
@@ -82,6 +89,17 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     });
   }
 
+  void _openProductDetail(Product product) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductDetailPage(
+          product: product,
+          onAddToCart: () => _toggleCart(product),
+        ),
+      ),
+    );
+  }
+
   void _removeFromCart(String productId, [BuildContext? context]) {
     final wasEmptyBefore = _cart.isEmpty;
     setState(() {
@@ -114,6 +132,27 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       return;
     }
 
+    if (widget.settingsRepository == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error de configuración de repositorio.')),
+      );
+      return;
+    }
+
+    final address = await widget.settingsRepository!.getDeliveryAddress(widget.user.email);
+    final payment = await widget.settingsRepository!.getPaymentMethod(widget.user.email);
+
+    if (address == null || payment == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, completa tus datos de entrega y pago en tu perfil.'),
+          backgroundColor: Color(0xFFB76A1A),
+        ),
+      );
+      _goToDetails();
+      return;
+    }
+
     final order = CustomerOrder(
       customerName: widget.user.fullName,
       customerEmail: widget.user.email,
@@ -127,9 +166,24 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             ),
           )
           .toList(),
+      deliveryAddress: address,
+      paymentMethod: payment,
     );
 
-    await widget.orderRepository!.saveOrder(order);
+    try {
+      await widget.orderRepository!.saveOrder(order);
+      // Forzamos la recarga de pedidos para que se vean reflejados inmediatamente
+      await widget.orderRepository!.load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo guardar el pedido: $error'),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -279,6 +333,35 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   void _goToProfile() => setState(() => _selectedTab = 3);
 
+  Future<void> _selectTab(int index) async {
+    if (index == 2 && widget.orderRepository != null) {
+      try {
+        await widget.orderRepository!.load();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron cargar los pedidos: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() => _selectedTab = index);
+  }
+
+  void _goToDetails() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CustomerDetailsPage(
+          user: widget.user,
+          settingsRepository: widget.settingsRepository!,
+        ),
+      ),
+    );
+  }
+
   void _handleLogout(BuildContext context) {
     if (widget.onLogout != null) {
       widget.onLogout!(context);
@@ -373,6 +456,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               products: _filteredProducts,
               cartCount: cartCount,
               onAddToCart: _toggleCart,
+              onProductTap: _openProductDetail,
               onOpenCart: () => _openCartSheet(context),
               onProfileTap: _goToProfile,
               onNotificationsTap: () => _showNotificationsSheet(context),
@@ -385,8 +469,13 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   setState(() => _selectedCategory = category),
               onSearchChanged: _onSearchChanged,
               onAddToCart: _toggleCart,
+              onProductTap: _openProductDetail,
               onOpenCart: () => _openCartSheet(context),
               cartCount: cartCount,
+            ),
+            CustomerOrdersPage(
+              user: widget.user,
+              orderRepository: widget.orderRepository ?? OrderRepositoryImpl(),
             ),
             _SimpleTab(
               title: 'Recompensas',
@@ -395,13 +484,14 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             _ProfileTab(
               user: widget.user,
               onLogout: _handleLogout,
+              onDetailsTap: _goToDetails,
             ),
           ],
         ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTab,
-        onDestinationSelected: (index) => setState(() => _selectedTab = index),
+        onDestinationSelected: _selectTab,
         backgroundColor: Colors.white,
         indicatorColor: AppTheme.accent,
         destinations: const [
@@ -414,6 +504,11 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             icon: Icon(Icons.grid_view_outlined),
             selectedIcon: Icon(Icons.grid_view),
             label: 'Menú',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Pedidos',
           ),
           NavigationDestination(
             icon: Icon(Icons.star_border),
@@ -448,6 +543,7 @@ class _HomeContent extends StatelessWidget {
     required this.products,
     required this.cartCount,
     required this.onAddToCart,
+    required this.onProductTap,
     required this.onOpenCart,
     required this.onProfileTap,
     required this.onNotificationsTap,
@@ -461,6 +557,7 @@ class _HomeContent extends StatelessWidget {
   final List<Product> products;
   final int cartCount;
   final ValueChanged<Product> onAddToCart;
+  final ValueChanged<Product> onProductTap;
   final VoidCallback onOpenCart;
   final VoidCallback onProfileTap;
   final VoidCallback onNotificationsTap;
@@ -546,7 +643,11 @@ class _HomeContent extends StatelessWidget {
           const SizedBox(height: 24),
           const _SectionTitle(title: 'Favoritos populares', action: 'Ver todo'),
           const SizedBox(height: 12),
-          _ProductRow(products: products, onAddToCart: onAddToCart),
+          _ProductRow(
+            products: products,
+            onAddToCart: onAddToCart,
+            onProductTap: onProductTap,
+          ),
           const SizedBox(height: 24),
           const _RewardsBanner(),
         ],
@@ -1001,10 +1102,11 @@ class _CategoryChip extends StatelessWidget {
 }
 
 class _ProductRow extends StatelessWidget {
-  const _ProductRow({required this.products, required this.onAddToCart});
+  const _ProductRow({required this.products, required this.onAddToCart, required this.onProductTap});
 
   final List<Product> products;
   final ValueChanged<Product> onAddToCart;
+  final ValueChanged<Product> onProductTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1043,7 +1145,10 @@ class _ProductRow extends StatelessWidget {
                       border: Border.all(color: const Color(0xFFEBDCCE)),
                     ),
                     padding: const EdgeInsets.all(10),
-                    child: Column(
+                    child: InkWell(
+                      onTap: () => onProductTap(product),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1098,6 +1203,7 @@ class _ProductRow extends StatelessWidget {
                           ],
                         ),
                       ],
+                      ),
                     ),
                   ),
                 ),
@@ -1118,6 +1224,7 @@ class _MenuTab extends StatelessWidget {
     required this.onCategoryChanged,
     required this.onSearchChanged,
     required this.onAddToCart,
+    required this.onProductTap,
     required this.onOpenCart,
     required this.cartCount,
   });
@@ -1128,6 +1235,7 @@ class _MenuTab extends StatelessWidget {
   final ValueChanged<ProductCategory?> onCategoryChanged;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<Product> onAddToCart;
+  final ValueChanged<Product> onProductTap;
   final VoidCallback onOpenCart;
   final int cartCount;
 
@@ -1223,7 +1331,10 @@ class _MenuTab extends StatelessWidget {
                                 color: const Color(0xFFEBDCCE),
                               ),
                             ),
-                            child: Column(
+                            child: InkWell(
+                              onTap: () => onProductTap(product),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ClipRRect(
@@ -1278,6 +1389,7 @@ class _MenuTab extends StatelessWidget {
                                   ],
                                 ),
                               ],
+                              ),
                             ),
                           );
                         },
@@ -1463,10 +1575,15 @@ class _SimpleTab extends StatelessWidget {
 }
 
 class _ProfileTab extends StatelessWidget {
-  const _ProfileTab({required this.user, required this.onLogout});
+  const _ProfileTab({
+    required this.user,
+    required this.onLogout,
+    required this.onDetailsTap,
+  });
 
   final AuthUser user;
   final void Function(BuildContext) onLogout;
+  final VoidCallback onDetailsTap;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -1540,6 +1657,18 @@ class _ProfileTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          ListTile(
+            leading: const Icon(Icons.location_on_outlined, color: AppTheme.accent),
+            title: const Text('Datos de entrega y pago'),
+            subtitle: const Text('Gestionar dirección y método de pago'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: onDetailsTap,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            tileColor: Colors.white,
+          ),
+          const SizedBox(height: 8),
           ListTile(
             leading: const Icon(Icons.logout_rounded, color: AppTheme.accent),
             title: const Text('Cerrar sesión'),

@@ -5,8 +5,11 @@ import 'package:restaurantapp/core/theme/app_theme.dart';
 import 'package:restaurantapp/features/auth/domain/entities/auth_user.dart';
 import 'package:restaurantapp/features/customer/data/repositories/order_repository_impl.dart';
 import 'package:restaurantapp/features/customer/data/repositories/product_repository_impl.dart';
+import 'package:restaurantapp/features/customer/data/repositories/user_settings_repository_impl.dart';
+import 'package:restaurantapp/features/customer/domain/entities/order.dart';
 import 'package:restaurantapp/features/customer/domain/usecases/get_products.dart';
 import 'package:restaurantapp/features/customer/presentation/pages/customer_home_page.dart';
+import 'package:restaurantapp/features/customer/presentation/pages/customer_orders_page.dart';
 import 'package:restaurantapp/features/customer/domain/entities/product.dart';
 
 void main() {
@@ -79,6 +82,15 @@ void main() {
   testWidgets('el menú muestra productos reales y permite confirmar un pedido', (tester) async {
     final repository = ProductRepositoryImpl();
     final orderRepository = OrderRepositoryImpl();
+    final settingsRepository = UserSettingsRepositoryImpl();
+    await settingsRepository.saveDeliveryAddress(
+      'ana@example.com',
+      const Address(street: 'Calle 1', city: 'Madrid', postalCode: '28001'),
+    );
+    await settingsRepository.savePaymentMethod(
+      'ana@example.com',
+      const PaymentMethod(type: 'Efectivo', details: 'Pago al recibir'),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -91,6 +103,7 @@ void main() {
           ),
           getProducts: GetProducts(repository),
           orderRepository: orderRepository,
+          settingsRepository: settingsRepository,
         ),
       ),
     );
@@ -114,6 +127,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(orderRepository.getOrders(), isNotEmpty);
+  });
+
+  testWidgets('el cliente ve sus pedidos realizados', (tester) async {
+    final orderRepository = OrderRepositoryImpl();
+    await orderRepository.saveOrder(
+      CustomerOrder(
+        customerName: 'Ana López',
+        customerEmail: 'ana@example.com',
+        items: [
+          CustomerOrderItem(
+            productId: 'bowl-bbq',
+            name: 'Bowl BBQ',
+            quantity: 1,
+            unitPrice: 8.25,
+          ),
+        ],
+        deliveryAddress: const Address(
+          street: 'Calle 1',
+          city: 'Madrid',
+          postalCode: '28001',
+        ),
+        paymentMethod: const PaymentMethod(
+          type: 'Efectivo',
+          details: 'Pago al recibir',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: CustomerOrdersPage(
+          user: const AuthUser(
+            fullName: 'Ana López',
+            email: 'ana@example.com',
+            role: AuthRole.customer,
+          ),
+          orderRepository: orderRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pedidos Activos'), findsOneWidget);
+    expect(find.textContaining('Bowl BBQ'), findsOneWidget);
   });
 
   testWidgets('permite quitar un producto antes de confirmar el pedido', (

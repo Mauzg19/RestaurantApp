@@ -97,6 +97,15 @@ void main() {
             unitPrice: 8.25,
           ),
         ],
+        deliveryAddress: const Address(
+          street: 'Calle Falsa 123',
+          city: 'Ciudad Ejemplo',
+          postalCode: '12345',
+        ),
+        paymentMethod: const PaymentMethod(
+          type: 'Tarjeta',
+          details: '**** 1234',
+        ),
       ),
     );
 
@@ -113,6 +122,7 @@ void main() {
             AdministratorRepositoryImpl(ProductRepositoryImpl(), orderRepository),
           ),
           productRepository: ProductRepositoryImpl(),
+          orderRepository: orderRepository,
           onLogout: (context) {},
         ),
       ),
@@ -120,5 +130,11 @@ void main() {
 
     expect(find.textContaining('Ana López'), findsOneWidget);
     expect(find.textContaining('Bowl BBQ'), findsAtLeastNWidgets(1));
+
+    await orderRepository.updateOrderStatus(
+      orderRepository.getOrders().single.id,
+      'delivered',
+    );
+    expect(orderRepository.getOrders().single.status, 'delivered');
   });
 }

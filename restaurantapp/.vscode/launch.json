@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RestaurantApp (Supabase)",
+      "type": "dart",
+      "request": "launch",
+      "args": [
+        "--dart-define=SUPABASE_ANON_KEY=sb_publishable_w7PaoswDBKhWKtXcVpX0mg_9Bth8hu5"
+      ]
+    }
+  ]
+}

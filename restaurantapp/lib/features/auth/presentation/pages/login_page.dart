@@ -9,6 +9,7 @@ import '../../../administrator/presentation/pages/administrator_home_page.dart';
 import '../../../customer/domain/usecases/get_products.dart';
 import '../../../customer/domain/repositories/order_repository.dart';
 import '../../../customer/domain/repositories/product_repository.dart';
+import '../../../customer/domain/repositories/user_settings_repository.dart';
 import '../../../customer/presentation/pages/customer_home_page.dart';
 import 'register_page.dart';
 
@@ -21,6 +22,7 @@ class LoginPage extends StatefulWidget {
     required this.getAdministratorDashboard,
     required this.productRepository,
     this.orderRepository,
+    this.settingsRepository,
   });
 
   final SignIn signIn;
@@ -29,6 +31,7 @@ class LoginPage extends StatefulWidget {
   final GetAdministratorDashboard getAdministratorDashboard;
   final ProductRepository productRepository;
   final OrderRepository? orderRepository;
+  final UserSettingsRepository? settingsRepository;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -58,12 +61,49 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     setState(() => _isLoading = false);
     if (user != null) {
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await widget.orderRepository?.load();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron cargar los pedidos: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => user.role == AuthRole.customer
               ? CustomerHomePage(
                   user: user,
                   getProducts: widget.getProducts,
+                  orderRepository: widget.orderRepository,
+                  settingsRepository: widget.settingsRepository,
+                  onLogout: (context) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (_) => LoginPage(
+                          signIn: widget.signIn,
+                          registerUser: widget.registerUser,
+                          getProducts: widget.getProducts,
+                          getAdministratorDashboard:
+                              widget.getAdministratorDashboard,
+                          productRepository: widget.productRepository,
+                          orderRepository: widget.orderRepository,
+                          settingsRepository: widget.settingsRepository,
+                        ),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                )
+              : AdministratorHomePage(
+                  user: user,
+                  getDashboard: widget.getAdministratorDashboard,
+                  productRepository: widget.productRepository,
                   orderRepository: widget.orderRepository,
                   onLogout: (context) {
                     Navigator.of(context).pushAndRemoveUntil(
@@ -76,27 +116,7 @@ class _LoginPageState extends State<LoginPage> {
                               widget.getAdministratorDashboard,
                           productRepository: widget.productRepository,
                           orderRepository: widget.orderRepository,
-                        ),
-                      ),
-                      (route) => false,
-                    );
-                  },
-                )
-              : AdministratorHomePage(
-                  user: user,
-                  getDashboard: widget.getAdministratorDashboard,
-                  productRepository: widget.productRepository,
-                  onLogout: (context) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (_) => LoginPage(
-                          signIn: widget.signIn,
-                          registerUser: widget.registerUser,
-                          getProducts: widget.getProducts,
-                          getAdministratorDashboard:
-                              widget.getAdministratorDashboard,
-                          productRepository: widget.productRepository,
-                          orderRepository: widget.orderRepository,
+                          settingsRepository: widget.settingsRepository,
                         ),
                       ),
                       (route) => false,

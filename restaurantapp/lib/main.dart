@@ -12,11 +12,14 @@ import 'features/administrator/data/repositories/administrator_repository_impl.d
 import 'features/administrator/domain/usecases/get_administrator_dashboard.dart';
 import 'features/customer/data/repositories/order_repository_impl.dart';
 import 'features/customer/data/repositories/product_repository_impl.dart';
+import 'features/customer/data/repositories/user_settings_repository_impl.dart';
 import 'features/customer/data/repositories/supabase_order_repository.dart';
 import 'features/customer/data/repositories/supabase_product_repository.dart';
+import 'features/customer/data/repositories/supabase_user_settings_repository.dart';
 import 'features/customer/domain/repositories/order_repository.dart';
 import 'features/customer/domain/usecases/get_products.dart';
 import 'features/customer/domain/repositories/product_repository.dart';
+import 'features/customer/domain/repositories/user_settings_repository.dart';
 import 'features/splash/presentation/pages/splash_page.dart';
 
 Future<void> main() async {
@@ -27,7 +30,7 @@ Future<void> main() async {
     localProductRepository,
   );
   final orderRepository = _buildOrderRepository();
-  await orderRepository.load();
+  final settingsRepository = _buildUserSettingsRepository();
   final authRepository = SupabaseConfig.isConfigured
       ? SupabaseAuthRepository(Supabase.instance.client)
       : AuthRepositoryImpl();
@@ -46,6 +49,7 @@ Future<void> main() async {
       getAdministratorDashboard: getAdministratorDashboard,
       productRepository: productRepository,
       orderRepository: orderRepository,
+      settingsRepository: settingsRepository,
     ),
   );
 }
@@ -56,6 +60,14 @@ OrderRepository _buildOrderRepository() {
   }
 
   return SupabaseOrderRepository(Supabase.instance.client);
+}
+
+UserSettingsRepository _buildUserSettingsRepository() {
+  if (!SupabaseConfig.isConfigured) {
+    return UserSettingsRepositoryImpl();
+  }
+
+  return SupabaseUserSettingsRepository(Supabase.instance.client);
 }
 
 Future<ProductRepository> _buildProductRepository(
@@ -84,6 +96,7 @@ class RestaurantApp extends StatelessWidget {
     required this.getAdministratorDashboard,
     required this.productRepository,
     required this.orderRepository,
+    required this.settingsRepository,
   });
 
   final SignIn signIn;
@@ -92,6 +105,7 @@ class RestaurantApp extends StatelessWidget {
   final GetAdministratorDashboard getAdministratorDashboard;
   final ProductRepository productRepository;
   final OrderRepository orderRepository;
+  final UserSettingsRepository settingsRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -107,6 +121,7 @@ class RestaurantApp extends StatelessWidget {
           getAdministratorDashboard: getAdministratorDashboard,
           productRepository: productRepository,
           orderRepository: orderRepository,
+          settingsRepository: settingsRepository,
         ),
       ),
     );

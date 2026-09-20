@@ -14,63 +14,71 @@ class SupabaseOrderRepository implements OrderRepository {
   List<CustomerOrder> getOrders() => List.unmodifiable(_orders);
 
   @override
+  List<CustomerOrder> getOrdersByEmail(String email) {
+    return _orders
+        .where(
+          (order) =>
+              order.customerEmail.trim().toLowerCase() ==
+              email.trim().toLowerCase(),
+        )
+        .toList();
+  }
+
+  @override
   Future<void> load() async {
-    try {
-      final rows = await client.from('orders').select();
-      _orders
-        ..clear()
-        ..addAll(
-          rows.map((row) {
-            final items = (row['items'] as List?) ?? const [];
-            return CustomerOrder(
-              id: row['id'] as String,
-              customerName: row['customer_name'] as String,
-              customerEmail: row['customer_email'] as String,
-              items: items.map<CustomerOrderItem>((item) {
-                final map = item as Map<String, dynamic>;
-                return CustomerOrderItem(
-                  productId: map['product_id'] as String? ?? '',
-                  name: map['name'] as String? ?? 'Producto',
-                  quantity: (map['quantity'] as num?)?.toInt() ?? 1,
-                  unitPrice: (map['unit_price'] as num?)?.toDouble() ?? 0,
-                );
-              }).toList(),
-              createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ??
-                  DateTime.now(),
-              status: row['status'] as String? ?? 'pending',
-            );
-          }).toList(),
-        );
-    } catch (_) {
-      // Keep the in-memory state if Supabase is unavailable.
+    final session = client.auth.currentSession;
+    if (session == null) {
+      throw StateError('No hay una sesión autenticada para cargar pedidos.');
     }
+
+    final rows = await client
+      .from('orders')
+      .select('*')
+      .order('created_at', ascending: false);
+    final loadedOrders = <CustomerOrder>[];
+    Object? firstParseError;
+    for (final row in rows) {
+      try {
+        loadedOrders.add(
+          CustomerOrder.fromJson(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        );
+      } catch (error) {
+        firstParseError ??= error;
+      }
+    }
+    if (rows.isNotEmpty && loadedOrders.isEmpty) {
+      throw StateError(
+        'Supabase devolvió ${rows.length} pedido(s), pero no se pudo interpretar ninguno: $firstParseError',
+      );
+    }
+    final loadedIds = loadedOrders.map((order) => order.id).toSet();
+    final locallySavedOrders = _orders
+        .where((order) => !loadedIds.contains(order.id))
+        .toList();
+    _orders
+      ..clear()
+      ..addAll(loadedOrders)
+      ..addAll(locallySavedOrders)
+      ..sort(
+        (first, second) => second.createdAt.compareTo(first.createdAt),
+      );
   }
 
   @override
   Future<void> saveOrder(CustomerOrder order) async {
+    await client.from('orders').insert(order.toJson());
     _orders.add(order);
+  }
 
-    try {
-      await client.from('orders').insert({
-        'id': order.id,
-        'customer_name': order.customerName,
-        'customer_email': order.customerEmail,
-        'items': order.items
-            .map(
-              (item) => {
-                'product_id': item.productId,
-                'name': item.name,
-                'quantity': item.quantity,
-                'unit_price': item.unitPrice,
-              },
-            )
-            .toList(),
-        'total': order.total,
-        'status': order.status,
-        'created_at': order.createdAt.toUtc().toIso8601String(),
-      });
-    } catch (_) {
-      // Keep the order available in memory even if Supabase is temporarily offline.
+  @override
+  Future<void> updateOrderStatus(String orderId, String status) async {
+    await client.from('orders').update({'status': status}).eq('id', orderId);
+
+    final index = _orders.indexWhere((order) => order.id == orderId);
+    if (index != -1) {
+      _orders[index] = _orders[index].copyWith(status: status);
     }
   }
 }

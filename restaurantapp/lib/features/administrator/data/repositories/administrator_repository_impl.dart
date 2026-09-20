@@ -19,7 +19,8 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
     final savedOrders = orderRepository?.getOrders() ?? const <CustomerOrder>[];
     final orders = savedOrders.isNotEmpty
         ? savedOrders.map(_toDashboardOrder).toList()
-        : const [
+        : orderRepository == null
+        ? const [
             DashboardOrder(
               id: '#1048',
               customer: 'Ana García',
@@ -44,7 +45,8 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
               total: 22.00,
               status: OrderStatus.ready,
             ),
-          ];
+          ]
+        : const <DashboardOrder>[];
 
     return AdministratorDashboard(
       metrics: const [
