@@ -47,6 +47,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final query = _searchQuery.trim().toLowerCase();
 
     return _products.where((product) {
+      if (!product.isAvailable) return false;
       final matchesCategory =
           _selectedCategory == null || product.category == _selectedCategory;
       final matchesQuery =
@@ -83,6 +84,12 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   );
 
   void _toggleCart(Product product) {
+    if (!product.isAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este producto está agotado.')),
+      );
+      return;
+    }
     setState(() {
       final current = _cart[product.id] ?? 0;
       _cart[product.id] = current + 1;
@@ -135,6 +142,23 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     if (widget.settingsRepository == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error de configuración de repositorio.')),
+      );
+      return;
+    }
+
+    final unavailable = _cartLines
+        .where((line) => !line.product.isAvailable)
+        .toList();
+    if (unavailable.isNotEmpty) {
+      setState(() {
+        for (final line in unavailable) {
+          _cart.remove(line.product.id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Se quitaron del carrito los productos agotados.'),
+        ),
       );
       return;
     }

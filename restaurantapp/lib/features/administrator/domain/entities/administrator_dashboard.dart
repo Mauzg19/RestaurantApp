@@ -78,6 +78,7 @@ class DashboardMenuItem {
     required this.name,
     required this.category,
     required this.stock,
+    required this.isAvailable,
     required this.price,
     this.imagePath,
   });
@@ -86,6 +87,7 @@ class DashboardMenuItem {
   final String name;
   final String category;
   final int stock;
+  final bool isAvailable;
   final double price;
   final String? imagePath;
 
@@ -93,6 +95,7 @@ class DashboardMenuItem {
     String? name,
     String? category,
     int? stock,
+    bool? isAvailable,
     double? price,
     String? imagePath,
   }) => DashboardMenuItem(
@@ -100,6 +103,7 @@ class DashboardMenuItem {
     name: name ?? this.name,
     category: category ?? this.category,
     stock: stock ?? this.stock,
+    isAvailable: isAvailable ?? this.isAvailable,
     price: price ?? this.price,
     imagePath: imagePath ?? this.imagePath,
   );

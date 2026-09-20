@@ -144,6 +144,30 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
     }
   }
 
+  Future<void> _updateAvailability(DashboardMenuItem item, bool value) async {
+    try {
+      await widget.productRepository.updateProductAvailability(item.id, value);
+      if (!mounted) return;
+      setState(() {
+        _menu = _menu
+            .map(
+              (current) => current.id == item.id
+                  ? current.copyWith(isAvailable: value)
+                  : current,
+            )
+            .toList();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo actualizar la disponibilidad: $error'),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
+    }
+  }
+
   Future<void> _showNotifications() async {
     setState(() => _hasUnreadNotifications = false);
     await showModalBottomSheet<void>(
@@ -276,6 +300,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
                     category: category.text.trim(),
                     price: double.parse(price.text.replaceAll(',', '.')),
                     stock: int.parse(stock.text),
+                    isAvailable: product?.isAvailable ?? true,
                     imagePath: imagePath,
                   ),
                 );
@@ -318,6 +343,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
         price: result.price,
         icon: categoryValue.icon,
         accentColor: AppTheme.accent,
+        isAvailable: result.isAvailable,
         imagePath: savedImagePath,
       ),
     );
@@ -373,6 +399,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
               hasUnread: _hasUnreadNotifications,
               onNotifications: _showNotifications,
               onAdvance: _advanceOrder,
+              onAvailabilityChanged: _updateAvailability,
               onOpenOrders: () => setState(() => _selectedTab = 1),
               onOpenInventory: () => setState(() => _selectedTab = 2),
               onLogout: widget.onLogout,
@@ -390,6 +417,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
               onQueryChanged: (query) => setState(() => _menuQuery = query),
               onAdd: () => _editProduct(),
               onEdit: _editProduct,
+              onAvailabilityChanged: _updateAvailability,
             ),
             _ProfileTab(user: widget.user),
           ],
@@ -436,6 +464,7 @@ class _DashboardTab extends StatelessWidget {
     required this.hasUnread,
     required this.onNotifications,
     required this.onAdvance,
+    required this.onAvailabilityChanged,
     required this.onOpenOrders,
     required this.onOpenInventory,
     this.onLogout,
@@ -447,6 +476,7 @@ class _DashboardTab extends StatelessWidget {
   final bool hasUnread;
   final VoidCallback onNotifications;
   final ValueChanged<DashboardOrder> onAdvance;
+  final void Function(DashboardMenuItem, bool) onAvailabilityChanged;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenInventory;
   final void Function(BuildContext)? onLogout;
@@ -537,7 +567,13 @@ class _DashboardTab extends StatelessWidget {
             onPressed: onOpenInventory,
           ),
           const SizedBox(height: 12),
-          ...menu.take(4).map((item) => _InventoryItem(item: item)),
+          ...menu.take(4).map(
+            (item) => _InventoryItem(
+              item: item,
+              onAvailabilityChanged: (value) =>
+                  onAvailabilityChanged(item, value),
+            ),
+          ),
         ],
       ),
     );
@@ -603,12 +639,14 @@ class _InventoryTab extends StatelessWidget {
     required this.onQueryChanged,
     required this.onAdd,
     required this.onEdit,
+    required this.onAvailabilityChanged,
   });
   final List<DashboardMenuItem> items;
   final String query;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onAdd;
   final ValueChanged<DashboardMenuItem> onEdit;
+  final void Function(DashboardMenuItem, bool) onAvailabilityChanged;
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -639,7 +677,12 @@ class _InventoryTab extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         ...items.map(
-          (item) => _InventoryItem(item: item, onEdit: () => onEdit(item)),
+          (item) => _InventoryItem(
+            item: item,
+            onEdit: () => onEdit(item),
+            onAvailabilityChanged: (value) =>
+                onAvailabilityChanged(item, value),
+          ),
         ),
       ],
     );
@@ -945,9 +988,14 @@ class _OrderCard extends StatelessWidget {
 }
 
 class _InventoryItem extends StatelessWidget {
-  const _InventoryItem({required this.item, this.onEdit});
+  const _InventoryItem({
+    required this.item,
+    required this.onAvailabilityChanged,
+    this.onEdit,
+  });
   final DashboardMenuItem item;
   final VoidCallback? onEdit;
+  final ValueChanged<bool> onAvailabilityChanged;
   @override
   Widget build(BuildContext context) {
     final isLowStock = item.stock <= 7;
@@ -979,35 +1027,52 @@ class _InventoryItem extends StatelessWidget {
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              Text(
-                'Stock: ${item.stock}',
-                style: TextStyle(
-                  color: isLowStock
-                      ? const Color(0xFFD97706)
-                      : const Color(0xFF1E7A52),
-                  fontWeight: FontWeight.bold,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Stock: ${item.stock}',
+                    style: TextStyle(
+                      color: isLowStock
+                          ? const Color(0xFFD97706)
+                          : const Color(0xFF1E7A52),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    !item.isAvailable
+                        ? 'Agotado'
+                        : isLowStock
+                        ? 'Reponer pronto'
+                        : 'Normal',
+                    style: TextStyle(
+                      color: !item.isAvailable
+                          ? const Color(0xFFB3261E)
+                          : isLowStock
+                          ? const Color(0xFFD97706)
+                          : const Color(0xFF1E7A52),
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (onEdit != null)
+                    TextButton(onPressed: onEdit, child: const Text('Editar')),
+                ],
               ),
-              const SizedBox(height: 4),
-              onEdit == null
-                  ? Text(
-                      isLowStock ? 'Reponer pronto' : 'Normal',
-                      style: TextStyle(
-                        color: isLowStock
-                            ? const Color(0xFFD97706)
-                            : const Color(0xFF1E7A52),
-                        fontSize: 12,
-                      ),
-                    )
-                  : TextButton(onPressed: onEdit, child: const Text('Editar')),
+              const SizedBox(width: 8),
+              Switch(
+                value: item.isAvailable,
+                activeThumbColor: AppTheme.accent,
+                onChanged: onAvailabilityChanged,
+              ),
             ],
           ),
         ],
       ),
     );
+
   }
 }
 

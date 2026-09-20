@@ -85,6 +85,9 @@ drop policy if exists "authenticated users can create products" on public.produc
 drop policy if exists "authenticated users can update products" on public.products;
 create policy "anyone can read available products" on public.products
   for select using (is_available = true);
+drop policy if exists "administrators can read all products" on public.products;
+create policy "administrators can read all products" on public.products
+  for select to authenticated using (public.is_administrator());
 create policy "administrators can create products" on public.products
   for insert to authenticated with check (public.is_administrator());
 create policy "administrators can update products" on public.products

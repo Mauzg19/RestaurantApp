@@ -13,6 +13,37 @@ import 'package:restaurantapp/features/customer/presentation/pages/customer_orde
 import 'package:restaurantapp/features/customer/domain/entities/product.dart';
 
 void main() {
+  test('el repositorio local conserva la disponibilidad del producto', () async {
+    final repository = ProductRepositoryImpl();
+    final product = repository.getProducts().first;
+
+    await repository.updateProductAvailability(product.id, false);
+
+    expect(repository.getProducts().first.isAvailable, isFalse);
+  });
+
+  testWidgets('el cliente no muestra productos agotados', (tester) async {
+    final repository = ProductRepositoryImpl();
+    final product = repository.getProducts().first;
+    await repository.updateProductAvailability(product.id, false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: CustomerHomePage(
+          user: const AuthUser(
+            fullName: 'Ana López',
+            email: 'ana@example.com',
+            role: AuthRole.customer,
+          ),
+          getProducts: GetProducts(repository),
+        ),
+      ),
+    );
+
+    expect(find.text(product.name), findsNothing);
+  });
+
   testWidgets('el cliente puede buscar productos y añadirlos al carrito', (tester) async {
     final getProducts = GetProducts(ProductRepositoryImpl());
 

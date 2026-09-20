@@ -53,6 +53,9 @@ class ProductRepositoryImpl implements ProductRepository {
   List<Product> getProducts() => List.unmodifiable(_products);
 
   @override
+  Future<void> load() async {}
+
+  @override
   void saveProduct(Product product) {
     final index = _products.indexWhere((current) => current.id == product.id);
     if (index == -1) {
@@ -60,6 +63,16 @@ class ProductRepositoryImpl implements ProductRepository {
     } else {
       _products[index] = product;
     }
+  }
+
+  @override
+  Future<void> updateProductAvailability(
+    String productId,
+    bool isAvailable,
+  ) async {
+    final index = _products.indexWhere((product) => product.id == productId);
+    if (index == -1) return;
+    _products[index] = _products[index].copyWith(isAvailable: isAvailable);
   }
 
   @override

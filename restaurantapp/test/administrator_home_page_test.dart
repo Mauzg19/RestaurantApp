@@ -11,6 +11,39 @@ import 'package:restaurantapp/features/customer/data/repositories/product_reposi
 import 'package:restaurantapp/features/customer/domain/entities/order.dart';
 
 void main() {
+  testWidgets('el administrador puede marcar un producto como agotado', (
+    tester,
+  ) async {
+    final productRepository = ProductRepositoryImpl();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: AdministratorHomePage(
+          user: const AuthUser(
+            fullName: 'Admin Principal',
+            email: 'admin@example.com',
+            role: AuthRole.administrator,
+          ),
+          getDashboard: GetAdministratorDashboard(
+            AdministratorRepositoryImpl(productRepository),
+          ),
+          productRepository: productRepository,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Inventario'));
+    await tester.pumpAndSettle();
+    final availabilitySwitch = find.byType(Switch).first;
+    await tester.ensureVisible(availabilitySwitch);
+    await tester.tap(availabilitySwitch);
+    await tester.pumpAndSettle();
+
+    expect(productRepository.getProducts().first.isAvailable, isFalse);
+    expect(find.text('Agotado'), findsAtLeastNWidgets(1));
+  });
+
   Widget buildSubject() {
     return MaterialApp(
       theme: AppTheme.dark,

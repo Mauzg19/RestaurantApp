@@ -63,6 +63,7 @@ class _LoginPageState extends State<LoginPage> {
     if (user != null) {
       try {
         await Future<void>.delayed(const Duration(milliseconds: 100));
+        await widget.productRepository.load();
         await widget.orderRepository?.load();
       } catch (error) {
         if (!mounted) return;

@@ -15,19 +15,17 @@ class SupabaseProductRepository implements ProductRepository {
   final SupabaseClient client;
   final List<Product> _products;
 
+  @override
   Future<void> load() async {
     try {
       final rows = await client
           .from('products')
           .select()
-          .eq('is_available', true)
           .order('created_at');
       final remoteProducts = rows.map(_fromRow).toList();
-      if (remoteProducts.isNotEmpty) {
-        _products
-          ..clear()
-          ..addAll(remoteProducts);
-      }
+      _products
+        ..clear()
+        ..addAll(remoteProducts);
     } catch (_) {
       // Keep the local fallback when the database is unavailable.
     }
@@ -45,6 +43,28 @@ class SupabaseProductRepository implements ProductRepository {
       _products[index] = product;
     }
     unawaited(_upsert(product));
+  }
+
+  @override
+  Future<void> updateProductAvailability(
+    String productId,
+    bool isAvailable,
+  ) async {
+    final rows = await client
+        .from('products')
+        .update({'is_available': isAvailable})
+        .eq('id', productId)
+        .select('id, is_available');
+    if (rows.isEmpty) {
+      throw StateError(
+        'No se pudo actualizar la disponibilidad del producto. Verifica el rol de administrador y que el producto exista.',
+      );
+    }
+
+    final index = _products.indexWhere((product) => product.id == productId);
+    if (index != -1) {
+      _products[index] = _products[index].copyWith(isAvailable: isAvailable);
+    }
   }
 
   @override
@@ -102,7 +122,7 @@ class SupabaseProductRepository implements ProductRepository {
         'category': product.category.name,
         'price': product.price,
         'image_url': product.imagePath,
-        'is_available': true,
+        'is_available': product.isAvailable,
       });
     } catch (_) {
       // The in-memory cache remains usable while the request is retried later.
@@ -122,6 +142,7 @@ class SupabaseProductRepository implements ProductRepository {
       icon: category.icon,
       accentColor: const Color(0xFFC95D32),
       imagePath: row['image_url'] as String?,
+      isAvailable: row['is_available'] as bool? ?? true,
     );
   }
 }
