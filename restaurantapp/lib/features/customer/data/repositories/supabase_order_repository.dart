@@ -74,7 +74,17 @@ class SupabaseOrderRepository implements OrderRepository {
 
   @override
   Future<void> updateOrderStatus(String orderId, String status) async {
-    await client.from('orders').update({'status': status}).eq('id', orderId);
+    final updatedRows = await client
+        .from('orders')
+        .update({'status': status})
+        .eq('id', orderId)
+        .select('id');
+
+    if (updatedRows.isEmpty) {
+      throw StateError(
+        'Supabase no actualizó ninguna fila. Ejecuta supabase/schema.sql y verifica que el perfil de la sesión tenga role = administrator y que el pedido exista en public.orders.',
+      );
+    }
 
     final index = _orders.indexWhere((order) => order.id == orderId);
     if (index != -1) {

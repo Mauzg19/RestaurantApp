@@ -22,6 +22,23 @@ update public.profiles set role = 'administrator'
 where id = (select id from auth.users where email = 'admin@restaurant.com');
 ```
 
+Después de aplicar el esquema, comprueba que el permiso quedó activo:
+
+```sql
+select u.email, p.role
+from auth.users u
+join public.profiles p on p.id = u.id
+where u.email = 'admin@restaurant.com';
+
+select polname, polcmd
+from pg_policies
+where schemaname = 'public' and tablename = 'orders';
+```
+
+El primer resultado debe mostrar `administrator` y el segundo debe incluir
+`administrators can update orders` con `polcmd = 'u'`. Si no aparece, vuelve a
+ejecutar todo `supabase/schema.sql` en el SQL Editor.
+
 El formulario público de registro no permite seleccionar el rol administrador.
 Para crear el único administrador, registra primero su correo desde **Authentication
 > Users > Add user**, establece su contraseña y luego ejecuta la actualización de

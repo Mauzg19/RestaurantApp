@@ -78,6 +78,8 @@ as $$
   );
 $$;
 
+grant execute on function public.is_administrator() to authenticated;
+
 drop policy if exists "anyone can read available products" on public.products;
 drop policy if exists "authenticated users can create products" on public.products;
 drop policy if exists "authenticated users can update products" on public.products;
