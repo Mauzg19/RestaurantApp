@@ -94,6 +94,11 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
+  Future<void> deleteProduct(String productId) async {
+    _products.removeWhere((product) => product.id == productId);
+  }
+
+  @override
   Future<String?> uploadProductImage(String filePath, String productId) async =>
       filePath;
 

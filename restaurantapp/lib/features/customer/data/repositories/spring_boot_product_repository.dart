@@ -182,6 +182,14 @@ class SpringBootProductRepository implements ProductRepository {
   }
 
   @override
+  Future<void> deleteProduct(String productId) async {
+    await httpClient.delete('${ApiConfig.baseUrl}/api/admin/food/$productId');
+
+    _products.removeWhere((product) => product.id == productId);
+    _rawFoods.remove(productId);
+  }
+
+  @override
   Future<String?> uploadProductImage(String filePath, String productId) async {
     final scheme = Uri.tryParse(filePath)?.scheme;
     if (scheme == 'http' || scheme == 'https') return filePath;

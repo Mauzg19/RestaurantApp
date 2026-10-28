@@ -168,6 +168,50 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
     }
   }
 
+  Future<void> _deleteProduct(DashboardMenuItem item) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Eliminar producto'),
+        content: Text('¿Estás seguro de que deseas eliminar "${item.name}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3261E)),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await widget.productRepository.deleteProduct(item.id);
+      if (!mounted) return;
+      setState(() {
+        _menu = _menu.where((current) => current.id != item.id).toList();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Producto "${item.name}" eliminado con éxito')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo eliminar el producto: $error'),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
+    }
+  }
+
   Future<void> _showNotifications() async {
     setState(() => _hasUnreadNotifications = false);
     await showModalBottomSheet<void>(
@@ -568,6 +612,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
               onQueryChanged: (query) => setState(() => _menuQuery = query),
               onAdd: () => _editProduct(),
               onEdit: _editProduct,
+              onDelete: _deleteProduct,
               onAvailabilityChanged: _updateAvailability,
             ),
             const SizedBox.expand(),
@@ -895,6 +940,7 @@ class _InventoryTab extends StatelessWidget {
     required this.onQueryChanged,
     required this.onAdd,
     required this.onEdit,
+    required this.onDelete,
     required this.onAvailabilityChanged,
   });
 
@@ -903,6 +949,7 @@ class _InventoryTab extends StatelessWidget {
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onAdd;
   final ValueChanged<DashboardMenuItem> onEdit;
+  final ValueChanged<DashboardMenuItem> onDelete;
   final void Function(DashboardMenuItem, bool) onAvailabilityChanged;
 
   @override
@@ -973,6 +1020,7 @@ class _InventoryTab extends StatelessWidget {
             (item) => _InventoryItem(
               item: item,
               onEdit: () => onEdit(item),
+              onDelete: () => onDelete(item),
               onAvailabilityChanged: (value) =>
                   onAvailabilityChanged(item, value),
             ),
@@ -1474,10 +1522,12 @@ class _InventoryItem extends StatelessWidget {
     required this.item,
     required this.onAvailabilityChanged,
     this.onEdit,
+    this.onDelete,
   });
 
   final DashboardMenuItem item;
   final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final ValueChanged<bool> onAvailabilityChanged;
 
   @override
@@ -1509,13 +1559,30 @@ class _InventoryItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.name,
-                  style: AppTheme.serif(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.offBlack,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        style: AppTheme.serif(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.offBlack,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: onDelete,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Color(0xFFB3261E),
+                        size: 20,
+                      ),
+                      tooltip: 'Eliminar producto',
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(4),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(

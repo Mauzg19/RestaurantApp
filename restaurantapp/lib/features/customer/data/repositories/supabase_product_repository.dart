@@ -83,6 +83,12 @@ class SupabaseProductRepository implements ProductRepository {
   }
 
   @override
+  Future<void> deleteProduct(String productId) async {
+    await client.from('products').delete().eq('id', productId);
+    _products.removeWhere((product) => product.id == productId);
+  }
+
+  @override
   Future<String?> uploadProductImage(String filePath, String productId) async {
     try {
       final extension = filePath.contains('.')

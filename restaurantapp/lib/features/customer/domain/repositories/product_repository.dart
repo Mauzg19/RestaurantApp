@@ -13,6 +13,8 @@ abstract interface class ProductRepository {
 
   Future<void> updateProductAvailability(String productId, bool isAvailable);
 
+  Future<void> deleteProduct(String productId);
+
   Future<String?> uploadProductImage(String filePath, String productId);
 
   Future<String?> uploadProductImageBytes(
