@@ -17,6 +17,19 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
   @override
   AdministratorDashboard getDashboard() {
     final savedOrders = orderRepository?.getOrders() ?? const <CustomerOrder>[];
+    final products = productRepository.getProducts();
+    final activeOrders = savedOrders
+        .where((order) => order.status != 'delivered')
+        .length;
+    final salesTotal = savedOrders.fold<double>(
+      0,
+      (total, order) => total + order.total,
+    );
+    final customerCount = savedOrders
+        .map((order) => order.customerEmail)
+        .where((email) => email.isNotEmpty)
+        .toSet()
+        .length;
     final orders = savedOrders.isNotEmpty
         ? savedOrders.map(_toDashboardOrder).toList()
         : orderRepository == null
@@ -49,38 +62,38 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
         : const <DashboardOrder>[];
 
     return AdministratorDashboard(
-      metrics: const [
+      metrics: [
         DashboardMetric(
           title: 'Pedidos activos',
-          value: '12',
-          detail: '+4 desde la última hora',
+          value: '$activeOrders',
+          detail: 'Pedidos registrados',
           icon: Icons.receipt_long,
           color: AppTheme.accent,
         ),
         DashboardMetric(
-          title: 'Ventas del día',
-          value: '£842',
-          detail: '+18% vs ayer',
+          title: 'Ventas registradas',
+          value: formatCop(salesTotal),
+          detail: 'Total de pedidos cargados',
           icon: Icons.trending_up,
           color: Color(0xFF7CCB9A),
         ),
         DashboardMetric(
           title: 'Productos',
-          value: '36',
-          detail: '8 con stock bajo',
+          value: '${products.length}',
+          detail: 'En el catálogo del backend',
           icon: Icons.restaurant_menu,
           color: Color(0xFFEDB15A),
         ),
         DashboardMetric(
           title: 'Clientes',
-          value: '1.2k',
-          detail: '90 nuevos esta semana',
+          value: '$customerCount',
+          detail: 'Con pedidos registrados',
           icon: Icons.people_alt_rounded,
           color: Color(0xFFB88DFF),
         ),
       ],
       orders: orders,
-      menu: productRepository.getProducts().map(_toMenuItem).toList(),
+      menu: products.map(_toMenuItem).toList(),
     );
   }
 
@@ -88,7 +101,8 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
     id: '#${order.id}',
     customer: order.customerName,
     items: order.summary,
-    time: '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}',
+    time:
+        '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}',
     total: order.total,
     status: _statusFromString(order.status),
   );
@@ -111,11 +125,10 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
   DashboardMenuItem _toMenuItem(Product product) => DashboardMenuItem(
     id: product.id,
     name: product.name,
-    category: product.category.label,
+    category: product.categoryName ?? product.category.label,
     stock: 20,
     isAvailable: product.isAvailable,
     price: product.price,
     imagePath: product.imagePath,
   );
-
 }

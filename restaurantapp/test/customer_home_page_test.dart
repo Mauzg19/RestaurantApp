@@ -13,14 +13,17 @@ import 'package:restaurantapp/features/customer/presentation/pages/customer_orde
 import 'package:restaurantapp/features/customer/domain/entities/product.dart';
 
 void main() {
-  test('el repositorio local conserva la disponibilidad del producto', () async {
-    final repository = ProductRepositoryImpl();
-    final product = repository.getProducts().first;
+  test(
+    'el repositorio local conserva la disponibilidad del producto',
+    () async {
+      final repository = ProductRepositoryImpl();
+      final product = repository.getProducts().first;
 
-    await repository.updateProductAvailability(product.id, false);
+      await repository.updateProductAvailability(product.id, false);
 
-    expect(repository.getProducts().first.isAvailable, isFalse);
-  });
+      expect(repository.getProducts().first.isAvailable, isFalse);
+    },
+  );
 
   testWidgets('el cliente no muestra productos agotados', (tester) async {
     final repository = ProductRepositoryImpl();
@@ -44,7 +47,9 @@ void main() {
     expect(find.text(product.name), findsNothing);
   });
 
-  testWidgets('el cliente puede buscar productos y añadirlos al carrito', (tester) async {
+  testWidgets('el cliente puede buscar productos y añadirlos al carrito', (
+    tester,
+  ) async {
     final getProducts = GetProducts(ProductRepositoryImpl());
 
     await tester.pumpWidget(
@@ -78,14 +83,16 @@ void main() {
     expect(find.text('1').first, findsOneWidget);
   });
 
-  testWidgets('el cliente ve productos creados en el catálogo compartido', (tester) async {
+  testWidgets('el cliente ve productos creados en el catálogo compartido', (
+    tester,
+  ) async {
     final repository = ProductRepositoryImpl();
     repository.saveProduct(
       const Product(
         id: 'new-menu-item',
         name: 'Ensalada Fresh',
         category: ProductCategory.bowls,
-        price: 7.50,
+        price: 7500,
         icon: Icons.rice_bowl,
         accentColor: Color(0xFFF28C28),
         imagePath: 'C:/restaurant-images/ensalada-fresh.jpg',
@@ -107,22 +114,13 @@ void main() {
     );
 
     expect(find.text('Ensalada Fresh'), findsOneWidget);
-    expect(find.text('£7.50'), findsOneWidget);
+    expect(find.text('\$7.500 COP'), findsOneWidget);
   });
 
-  testWidgets('el menú muestra productos reales y permite confirmar un pedido', (tester) async {
-    final repository = ProductRepositoryImpl();
-    final orderRepository = OrderRepositoryImpl();
-    final settingsRepository = UserSettingsRepositoryImpl();
-    await settingsRepository.saveDeliveryAddress(
-      'ana@example.com',
-      const Address(street: 'Calle 1', city: 'Madrid', postalCode: '28001'),
-    );
-    await settingsRepository.savePaymentMethod(
-      'ana@example.com',
-      const PaymentMethod(type: 'Efectivo', details: 'Pago al recibir'),
-    );
-
+  testWidgets('inicio y menú muestran las categorías reales del restaurante', (
+    tester,
+  ) async {
+    final repository = _CustomCategoryProductRepository();
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
@@ -133,32 +131,111 @@ void main() {
             role: AuthRole.customer,
           ),
           getProducts: GetProducts(repository),
-          orderRepository: orderRepository,
-          settingsRepository: settingsRepository,
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Postres'), findsOneWidget);
+    expect(find.text('Burritos'), findsNothing);
+    expect(find.text('Tacos'), findsNothing);
+
+    final homeCategory = find.text('Postres').first;
+    await tester.ensureVisible(homeCategory);
+    await tester.tap(homeCategory);
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.grid_view_outlined).last);
     await tester.pumpAndSettle();
-
-    expect(find.text('Burrito de pollo'), findsOneWidget);
-    expect(find.byType(GridView), findsWidgets);
-
-    await tester.tap(find.text('Añadir').first);
-    await tester.pump();
-
-    await tester.tap(find.byIcon(Icons.shopping_cart_outlined).first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Confirmar pedido'), findsOneWidget);
-    expect(find.text('Total'), findsOneWidget);
-
-    await tester.tap(find.text('Confirmar pedido'));
-    await tester.pumpAndSettle();
-
-    expect(orderRepository.getOrders(), isNotEmpty);
+    expect(find.text('Menú'), findsAtLeastNWidgets(2));
+    expect(find.text('Postres'), findsAtLeastNWidgets(1));
+    expect(find.text('Torta de chocolate'), findsOneWidget);
   });
+
+  testWidgets('cada categoría de comida tiene un icono adecuado', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: CustomerHomePage(
+          user: const AuthUser(
+            fullName: 'Ana López',
+            email: 'ana@example.com',
+            role: AuthRole.customer,
+          ),
+          getProducts: GetProducts(_FoodCategoryLogoRepository()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.grid_view_outlined).last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hamburguesa'), findsOneWidget);
+    expect(find.text('Nachos'), findsOneWidget);
+    expect(find.text('Perro caliente'), findsOneWidget);
+    expect(find.text('Pizza'), findsOneWidget);
+    expect(find.text('Pollo frito'), findsOneWidget);
+    expect(find.byIcon(Icons.lunch_dining), findsOneWidget);
+    expect(find.byIcon(Icons.tapas), findsOneWidget);
+    expect(find.byIcon(Icons.kebab_dining), findsOneWidget);
+    expect(find.byIcon(Icons.local_pizza), findsOneWidget);
+    expect(find.byIcon(Icons.set_meal), findsOneWidget);
+  });
+
+  testWidgets(
+    'el menú muestra productos reales y permite confirmar un pedido',
+    (tester) async {
+      final repository = ProductRepositoryImpl();
+      final orderRepository = OrderRepositoryImpl();
+      final settingsRepository = UserSettingsRepositoryImpl();
+      await settingsRepository.saveDeliveryAddress(
+        'ana@example.com',
+        const Address(street: 'Calle 1', city: 'Madrid', postalCode: '28001'),
+      );
+      await settingsRepository.savePaymentMethod(
+        'ana@example.com',
+        const PaymentMethod(type: 'Efectivo', details: 'Pago al recibir'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: CustomerHomePage(
+            user: const AuthUser(
+              fullName: 'Ana López',
+              email: 'ana@example.com',
+              role: AuthRole.customer,
+            ),
+            getProducts: GetProducts(repository),
+            orderRepository: orderRepository,
+            settingsRepository: settingsRepository,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.grid_view_outlined).last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Burrito de pollo'), findsOneWidget);
+      expect(find.byType(GridView), findsWidgets);
+
+      await tester.tap(find.text('Añadir').first);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.shopping_cart_outlined).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirmar pedido'), findsOneWidget);
+      expect(find.text('Total'), findsOneWidget);
+
+      await tester.tap(find.text('Confirmar pedido'));
+      await tester.pumpAndSettle();
+
+      expect(orderRepository.getOrders(), isNotEmpty);
+    },
+  );
 
   testWidgets('el cliente ve sus pedidos realizados', (tester) async {
     final orderRepository = OrderRepositoryImpl();
@@ -269,4 +346,38 @@ void main() {
 
     expect(find.text('Cerrar sesión'), findsOneWidget);
   });
+}
+
+class _CustomCategoryProductRepository extends ProductRepositoryImpl {
+  static const _product = Product(
+    id: 'chocolate-cake',
+    name: 'Torta de chocolate',
+    category: ProductCategory.sides,
+    categoryName: 'Postres',
+    price: 6000,
+    icon: Icons.cake,
+    accentColor: Color(0xFFC95D32),
+  );
+
+  @override
+  List<Product> getProducts() => const [_product];
+
+  @override
+  Future<List<ProductCategoryOption>> getCategories() async => const [
+    ProductCategoryOption(name: 'Postres'),
+  ];
+}
+
+class _FoodCategoryLogoRepository extends ProductRepositoryImpl {
+  @override
+  List<Product> getProducts() => const [];
+
+  @override
+  Future<List<ProductCategoryOption>> getCategories() async => const [
+    ProductCategoryOption(name: 'Hamburguesa'),
+    ProductCategoryOption(name: 'Nachos'),
+    ProductCategoryOption(name: 'Perro caliente'),
+    ProductCategoryOption(name: 'Pizza'),
+    ProductCategoryOption(name: 'Pollo frito'),
+  ];
 }

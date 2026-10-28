@@ -11,6 +11,9 @@ class SupabaseOrderRepository implements OrderRepository {
   final List<CustomerOrder> _orders;
 
   @override
+  bool get requiresCheckout => false;
+
+  @override
   List<CustomerOrder> getOrders() => List.unmodifiable(_orders);
 
   @override
@@ -67,9 +70,10 @@ class SupabaseOrderRepository implements OrderRepository {
   }
 
   @override
-  Future<void> saveOrder(CustomerOrder order) async {
+  Future<String?> saveOrder(CustomerOrder order) async {
     await client.from('orders').insert(order.toJson());
     _orders.add(order);
+    return null;
   }
 
   @override

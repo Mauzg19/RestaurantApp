@@ -39,6 +39,13 @@ dependencies:
   video_player_win: ^3.2.2
   file_picker: ^10.3.3
   supabase_flutter: ^2.17.2
+  flutter_stripe: ^11.5.0
+  stripe_js: ^6.4.0
+  url_launcher: ^6.3.2
+  http: ^1.6.0
+  shared_preferences: ^2.5.6
+  local_auth: ^3.0.2
+  flutter_secure_storage: ^10.3.4
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +57,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  path_provider_android: 2.2.19
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

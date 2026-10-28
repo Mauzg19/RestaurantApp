@@ -47,11 +47,13 @@ class Product {
     this.description,
     this.ingredients,
     this.allergens,
+    this.categoryName,
   });
 
   final String id;
   final String name;
   final ProductCategory category;
+  final String? categoryName;
   final double price;
   final IconData icon;
   final Color accentColor;
@@ -61,8 +63,7 @@ class Product {
   final List<String>? allergens;
   final bool isAvailable;
 
-
-  String get formattedPrice => '£${price.toStringAsFixed(2)}';
+  String get formattedPrice => formatCop(price);
 
   Product copyWith({bool? isAvailable, String? imagePath}) => Product(
     id: id,
@@ -76,5 +77,23 @@ class Product {
     description: description,
     ingredients: ingredients,
     allergens: allergens,
+    categoryName: categoryName,
   );
+}
+
+class ProductCategoryOption {
+  const ProductCategoryOption({required this.name, this.id});
+
+  final int? id;
+  final String name;
+}
+
+String formatCop(double amount) {
+  final roundedAmount = amount.round();
+  final digits = roundedAmount.abs().toString();
+  final grouped = digits.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => '.',
+  );
+  return '${roundedAmount < 0 ? '-' : ''}\$$grouped COP';
 }

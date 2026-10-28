@@ -53,10 +53,28 @@ class ProductRepositoryImpl implements ProductRepository {
   List<Product> getProducts() => List.unmodifiable(_products);
 
   @override
+  Future<List<ProductCategoryOption>> getCategories() async {
+    final categories = <String, ProductCategoryOption>{};
+    for (final product in _products) {
+      final name = (product.categoryName ?? product.category.label).trim();
+      if (name.isNotEmpty) {
+        categories.putIfAbsent(
+          name.toLowerCase(),
+          () => ProductCategoryOption(name: name),
+        );
+      }
+    }
+    return categories.values.toList();
+  }
+
+  @override
   Future<void> load() async {}
 
   @override
-  void saveProduct(Product product) {
+  Future<void> saveProduct(
+    Product product, {
+    ProductCategoryOption? category,
+  }) async {
     final index = _products.indexWhere((current) => current.id == product.id);
     if (index == -1) {
       _products.add(product);

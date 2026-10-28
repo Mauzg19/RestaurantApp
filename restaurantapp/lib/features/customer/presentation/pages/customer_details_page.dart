@@ -4,16 +4,19 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/repositories/user_settings_repository.dart';
+import '../../../../core/services/biometric_auth_service.dart';
 
 class CustomerDetailsPage extends StatefulWidget {
   const CustomerDetailsPage({
     super.key,
     required this.user,
     required this.settingsRepository,
+    this.collectPaymentMethod = true,
   });
 
   final AuthUser user;
   final UserSettingsRepository settingsRepository;
+  final bool collectPaymentMethod;
 
   @override
   State<CustomerDetailsPage> createState() => _CustomerDetailsPageState();
@@ -29,6 +32,7 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
   late TextEditingController _paymentTypeController;
   late TextEditingController _paymentDetailsController;
   bool _isSaving = false;
+  bool _biometricEnabled = false;
 
   @override
   void initState() {
@@ -44,7 +48,9 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
 
   Future<void> _loadData() async {
     final address = await widget.settingsRepository.getDeliveryAddress(widget.user.email);
-    final payment = await widget.settingsRepository.getPaymentMethod(widget.user.email);
+    final payment = widget.collectPaymentMethod
+        ? await widget.settingsRepository.getPaymentMethod(widget.user.email)
+        : null;
 
     if (!mounted) return;
     setState(() {
@@ -55,6 +61,12 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
       _paymentTypeController.text = payment?.type ?? '';
       _paymentDetailsController.text = payment?.details ?? '';
     });
+    final biometricEnabled = await BiometricAuthService.instance.isBiometricLoginEnabled();
+    if (mounted) {
+      setState(() {
+        _biometricEnabled = biometricEnabled;
+      });
+    }
   }
 
   @override
@@ -92,10 +104,12 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
         widget.user.email,
         address,
       );
-      await widget.settingsRepository.savePaymentMethod(
-        widget.user.email,
-        payment,
-      );
+      if (widget.collectPaymentMethod) {
+        await widget.settingsRepository.savePaymentMethod(
+          widget.user.email,
+          payment,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _isSaving = false);
@@ -146,11 +160,43 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
               const SizedBox(height: 16),
               _buildTextField(_notesController, 'Notas adicionales', Icons.note_add),
               const SizedBox(height: 32),
-              const _SectionTitle(title: 'Método de Pago'),
+              const _SectionTitle(title: 'Seguridad'),
               const SizedBox(height: 16),
-              _buildTextField(_paymentTypeController, 'Tipo (Ej: Tarjeta, Efectivo)', Icons.payment, (v) => v == null || v.isEmpty ? 'Requerido' : null),
-              const SizedBox(height: 16),
-              _buildTextField(_paymentDetailsController, 'Detalles (Ej: **** 1234)', Icons.credit_card, (v) => v == null || v.isEmpty ? 'Requerido' : null),
+              SwitchListTile(
+                title: const Text('Inicio de sesión biométrico'),
+                subtitle: const Text('Usar huella digital para entrar'),
+                secondary: const Icon(Icons.fingerprint, color: AppTheme.accent),
+                value: _biometricEnabled,
+                onChanged: (value) async {
+                  if (value) {
+                    // Para activar, necesitamos que el usuario autentique su huella primero
+                    final authenticated = await BiometricAuthService.instance.authenticate(
+                      reason: 'Confirma tu huella para activar el inicio rápido',
+                    );
+                    if (authenticated && mounted) {
+                      // Nota: Aquí asumimos que ya tenemos las credenciales en la sesión actual
+                      // En una implementación real, deberías pasar el email y password actuales
+                      // Si no están disponibles, se le pide al usuario que haga login manual primero.
+                      await BiometricAuthService.instance.enableBiometricLogin(
+                        email: widget.user.email,
+                        password: '', // El password debería venir del gestor de sesión si está disponible
+                      );
+                      setState(() => _biometricEnabled = true);
+                    }
+                  } else {
+                    await BiometricAuthService.instance.disableBiometricLogin();
+                    if (mounted) setState(() => _biometricEnabled = false);
+                  }
+                },
+              ),
+              const SizedBox(height: 32),
+              if (widget.collectPaymentMethod) ...[
+                const _SectionTitle(title: 'Método de Pago'),
+                const SizedBox(height: 16),
+                _buildTextField(_paymentTypeController, 'Tipo (Ej: Tarjeta, Efectivo)', Icons.payment, (v) => v == null || v.isEmpty ? 'Requerido' : null),
+                const SizedBox(height: 16),
+                _buildTextField(_paymentDetailsController, 'Detalles (Ej: **** 1234)', Icons.credit_card, (v) => v == null || v.isEmpty ? 'Requerido' : null),
+              ],
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,

@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'core/config/supabase_config.dart';
+import 'core/network/http_client_service.dart';
+import 'core/session/session_manager.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/data/repositories/auth_repository_impl.dart';
-import 'features/auth/data/repositories/supabase_auth_repository.dart';
+import 'features/auth/data/repositories/spring_boot_auth_repository.dart';
+import 'features/auth/domain/entities/auth_user.dart';
+import 'features/auth/domain/repositories/auth_repository.dart';
 import 'features/auth/domain/usecases/register_user.dart';
 import 'features/auth/domain/usecases/sign_in.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/administrator/data/repositories/administrator_repository_impl.dart';
 import 'features/administrator/domain/usecases/get_administrator_dashboard.dart';
-import 'features/customer/data/repositories/order_repository_impl.dart';
-import 'features/customer/data/repositories/product_repository_impl.dart';
-import 'features/customer/data/repositories/user_settings_repository_impl.dart';
-import 'features/customer/data/repositories/supabase_order_repository.dart';
-import 'features/customer/data/repositories/supabase_product_repository.dart';
-import 'features/customer/data/repositories/supabase_user_settings_repository.dart';
+import 'features/customer/data/repositories/spring_boot_order_repository.dart';
+import 'features/customer/data/repositories/spring_boot_product_repository.dart';
+import 'features/customer/data/repositories/spring_boot_user_settings_repository.dart';
+import 'features/customer/data/services/payment_service.dart';
 import 'features/customer/domain/repositories/order_repository.dart';
 import 'features/customer/domain/usecases/get_products.dart';
 import 'features/customer/domain/repositories/product_repository.dart';
@@ -25,15 +24,29 @@ import 'features/splash/presentation/pages/splash_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final localProductRepository = ProductRepositoryImpl();
-  final productRepository = await _buildProductRepository(
-    localProductRepository,
+  // 1. Inicializar sesión persistente y cliente HTTP Spring Boot
+  final sessionManager = await SessionManager.getInstance();
+  final httpClient = HttpClientService(sessionManager: sessionManager);
+  final currentUser = sessionManager.getCurrentUser();
+
+  // Los datos de negocio y la autenticación se gestionan en Spring Boot/MySQL.
+  final productRepository = SpringBootProductRepository(httpClient: httpClient);
+  await productRepository.load();
+  final orderRepository = SpringBootOrderRepository(
+    httpClient: httpClient,
+    restaurantId: productRepository.restaurantId,
+    isAdministrator: () =>
+        sessionManager.getCurrentUser()?.role == AuthRole.administrator,
   );
-  final orderRepository = _buildOrderRepository();
-  final settingsRepository = _buildUserSettingsRepository();
-  final authRepository = SupabaseConfig.isConfigured
-      ? SupabaseAuthRepository(Supabase.instance.client)
-      : AuthRepositoryImpl();
+  final settingsRepository = SpringBootUserSettingsRepository(
+    httpClient: httpClient,
+  );
+
+  final AuthRepository authRepository = SpringBootAuthRepository(
+    httpClient: httpClient,
+    sessionManager: sessionManager,
+  );
+
   final signIn = SignIn(authRepository);
   final registerUser = RegisterUser(authRepository);
   final getProducts = GetProducts(productRepository);
@@ -50,41 +63,10 @@ Future<void> main() async {
       productRepository: productRepository,
       orderRepository: orderRepository,
       settingsRepository: settingsRepository,
+      paymentService: null,
+      initialUser: currentUser,
     ),
   );
-}
-
-OrderRepository _buildOrderRepository() {
-  if (!SupabaseConfig.isConfigured) {
-    return OrderRepositoryImpl();
-  }
-
-  return SupabaseOrderRepository(Supabase.instance.client);
-}
-
-UserSettingsRepository _buildUserSettingsRepository() {
-  if (!SupabaseConfig.isConfigured) {
-    return UserSettingsRepositoryImpl();
-  }
-
-  return SupabaseUserSettingsRepository(Supabase.instance.client);
-}
-
-Future<ProductRepository> _buildProductRepository(
-  ProductRepositoryImpl fallback,
-) async {
-  if (!SupabaseConfig.isConfigured) return fallback;
-
-  await Supabase.initialize(
-    url: SupabaseConfig.url,
-    publishableKey: SupabaseConfig.anonKey,
-  );
-  final repository = SupabaseProductRepository(
-    Supabase.instance.client,
-    fallback: fallback.getProducts(),
-  );
-  await repository.load();
-  return repository;
 }
 
 class RestaurantApp extends StatelessWidget {
@@ -97,6 +79,8 @@ class RestaurantApp extends StatelessWidget {
     required this.productRepository,
     required this.orderRepository,
     required this.settingsRepository,
+    this.paymentService,
+    this.initialUser,
   });
 
   final SignIn signIn;
@@ -106,11 +90,13 @@ class RestaurantApp extends StatelessWidget {
   final ProductRepository productRepository;
   final OrderRepository orderRepository;
   final UserSettingsRepository settingsRepository;
+  final PaymentService? paymentService;
+  final AuthUser? initialUser;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Restaurant Fast',
+      title: 'Restaurant Fast & AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       home: SplashPage(
@@ -122,6 +108,7 @@ class RestaurantApp extends StatelessWidget {
           productRepository: productRepository,
           orderRepository: orderRepository,
           settingsRepository: settingsRepository,
+          paymentService: paymentService,
         ),
       ),
     );

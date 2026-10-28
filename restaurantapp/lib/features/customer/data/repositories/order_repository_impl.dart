@@ -5,6 +5,9 @@ class OrderRepositoryImpl implements OrderRepository {
   final List<CustomerOrder> _orders = [];
 
   @override
+  bool get requiresCheckout => false;
+
+  @override
   List<CustomerOrder> getOrders() => List.unmodifiable(_orders);
 
   @override
@@ -23,8 +26,9 @@ class OrderRepositoryImpl implements OrderRepository {
   }
 
   @override
-  Future<void> saveOrder(CustomerOrder order) async {
+  Future<String?> saveOrder(CustomerOrder order) async {
     _orders.add(order);
+    return null;
   }
 
   @override

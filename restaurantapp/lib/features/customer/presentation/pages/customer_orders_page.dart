@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
 import '../../domain/entities/order.dart';
+import '../../domain/entities/product.dart';
 import '../../domain/repositories/order_repository.dart';
 
 class CustomerOrdersPage extends StatefulWidget {
@@ -176,7 +177,7 @@ class _OrderCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Total: £${order.total.toStringAsFixed(2)}',
+                    'Total: ${formatCop(order.total)}',
                     style: const TextStyle(
                       color: AppTheme.accent,
                       fontWeight: FontWeight.bold,

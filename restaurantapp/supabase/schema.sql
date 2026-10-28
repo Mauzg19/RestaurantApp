@@ -27,6 +27,8 @@ create table if not exists public.orders (
   delivery_notes text,
   payment_type text not null default '',
   payment_details text not null default '',
+  payment_intent_id text,
+  payment_status text not null default 'pending' check (payment_status in ('pending', 'paid', 'failed', 'refunded')),
   total numeric(10, 2) not null check (total >= 0),
   status text not null default 'pending' check (status in ('pending', 'preparing', 'ready', 'delivered')),
   created_at timestamptz not null default now()
@@ -49,6 +51,8 @@ alter table public.orders add column if not exists delivery_postal_code text not
 alter table public.orders add column if not exists delivery_notes text;
 alter table public.orders add column if not exists payment_type text not null default '';
 alter table public.orders add column if not exists payment_details text not null default '';
+alter table public.orders add column if not exists payment_intent_id text;
+alter table public.orders add column if not exists payment_status text not null default 'pending';
 alter table public.user_settings add column if not exists notes text;
 
 alter table public.profiles enable row level security;

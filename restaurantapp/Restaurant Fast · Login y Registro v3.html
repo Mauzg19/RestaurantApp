@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Restaurant Fast · Acceso v3</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap">
+<style>
+:root{--stage:#e4e2d8;--stage-ink:#23221c;--bg:#faf8f1;--ink:#111;--lime:#b8f23a;--org:#ff7a1a;--mute:#5d5a4e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--stage:#0d0d0b;--stage-ink:#d6d4c6}}
+:root[data-theme="dark"]{--stage:#0d0d0b;--stage-ink:#d6d4c6}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;margin:0}
+body{background:var(--stage);color:var(--stage-ink);font-family:'DM Sans',system-ui,sans-serif}
+.stage{display:flex;flex-wrap:wrap;gap:40px;justify-content:center;padding:32px 16px}
+.phone{width:100%;max-width:380px;min-height:780px;background:var(--bg);color:var(--ink);border:3px solid var(--ink);border-radius:30px;padding:22px 22px 24px;display:flex;flex-direction:column;position:relative;overflow:hidden;box-shadow:8px 8px 0 var(--ink)}
+.top{display:flex;align-items:center;gap:10px;font:800 17px 'Bricolage Grotesque',sans-serif}
+.logo{width:34px;height:34px;border:2.5px solid var(--ink);border-radius:10px;background:var(--lime);display:grid;place-items:center}
+.logo svg{width:18px;height:18px;stroke:var(--ink);fill:none;stroke-width:2.2;stroke-linecap:round}
+.badge{position:absolute;right:14px;top:62px;width:112px;height:112px;animation:spin 18s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.badge{animation:none}}
+h1{font:800 46px/.95 'Bricolage Grotesque',sans-serif;letter-spacing:-.04em;margin:38px 0 8px;max-width:270px}
+h1 mark{background:linear-gradient(transparent 55%,var(--lime) 55% 92%,transparent 92%);color:inherit;padding:0 2px}
+.sub{font-size:14px;color:var(--mute);margin-bottom:20px;max-width:250px}
+label.fld{display:block;margin-bottom:14px}
+.fld span{display:block;font:700 11px 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;margin-bottom:6px}
+.in{position:relative}
+.in input{width:100%;height:52px;border:2.5px solid var(--ink);border-radius:12px;background:#fff;padding:0 48px 0 14px;font:500 16px 'DM Sans',sans-serif;color:var(--ink);outline:0;transition:box-shadow .12s,transform .12s}
+.in input:focus{box-shadow:4px 4px 0 var(--lime),4px 4px 0 2.5px var(--ink);transform:translate(-2px,-2px)}
+.in button{position:absolute;right:6px;top:6px;height:40px;padding:0 8px;border:0;background:none;font:700 11px 'DM Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;color:var(--ink);text-decoration:underline}
+.meter{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:-2px 0 4px}
+.meter i{height:10px;border:2px solid var(--ink);border-radius:5px;background:#fff;transition:background .2s}
+.hint{font-size:12px;color:var(--mute);min-height:16px;margin-bottom:2px}
+.forgot{align-self:flex-start;color:var(--ink);font-size:13px;font-weight:700;margin:-2px 0 0}
+.cta{margin-top:14px;height:58px;border:2.5px solid var(--ink);border-radius:14px;background:var(--lime);color:var(--ink);font:800 17px 'Bricolage Grotesque',sans-serif;letter-spacing:.02em;text-transform:uppercase;cursor:pointer;box-shadow:5px 5px 0 var(--ink);transition:transform .1s,box-shadow .1s}
+.cta:active{transform:translate(4px,4px);box-shadow:1px 1px 0 var(--ink)}
+.or{display:flex;align-items:center;gap:10px;font:700 11px 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;margin:18px 0 12px}
+.or::before,.or::after{content:"";flex:1;border-top:2.5px dashed var(--ink)}
+.soc{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.soc button{height:46px;border:2.5px solid var(--ink);border-radius:12px;background:#fff;font:700 14px 'DM Sans',sans-serif;color:var(--ink);cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.soc button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.swap{margin-top:auto;padding-top:20px;text-align:center;font-size:14px}
+.swap a{display:inline-block;margin-left:4px;padding:6px 12px;border:2.5px solid var(--ink);border-radius:99px;background:var(--org);color:var(--ink);font-weight:700;text-decoration:none}
+:focus-visible{outline:3px solid var(--org);outline-offset:3px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="fork" viewBox="0 0 24 24"><path d="M8 3v6a2 2 0 0 0 2 2v10M6 3v4M10 3v4M17 21V3c-2.4 1.4-3.4 3.6-3.4 6.4 0 1.9 1 2.9 3.4 2.9"/></symbol>
+</svg>
+<div class="stage">
+
+<section class="phone" id="login" aria-label="Iniciar sesión">
+  <div class="top"><span class="logo"><svg><use href="#fork"/></svg></span>Restaurant Fast</div>
+  <svg class="badge" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="57" fill="#ff7a1a" stroke="#111" stroke-width="3"/><path id="b1" d="M60 60m-40 0a40 40 0 1 1 80 0a40 40 0 1 1-80 0" fill="none"/><text font-family="DM Sans" font-weight="700" font-size="12.5" letter-spacing="2" fill="#111"><textPath href="#b1">ENVÍO GRATIS · 25 MIN · </textPath></text><circle cx="60" cy="60" r="14" fill="#b8f23a" stroke="#111" stroke-width="3"/></svg>
+  <h1>¿Qué se te <mark>antoja</mark> hoy?</h1>
+  <p class="sub">Entra y repite tu pedido favorito en dos toques.</p>
+  <form onsubmit="return false" style="display:flex;flex-direction:column;flex:1">
+    <label class="fld"><span>Correo</span><div class="in"><input type="email" autocomplete="email" placeholder="tu@correo.com"></div></label>
+    <label class="fld"><span>Contraseña</span><div class="in"><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••"><button type="button" data-eye="lp" aria-label="Mostrar u ocultar contraseña">Ver</button></div></label>
+    <a class="forgot" href="#">¿Olvidaste tu contraseña?</a>
+    <button class="cta">Entrar</button>
+    <div class="or">o con</div>
+    <div class="soc"><button type="button">Google</button><button type="button">Apple</button></div>
+    <p class="swap">¿Primera vez?<a href="#register">Crea cuenta</a></p>
+  </form>
+</section>
+
+<section class="phone" id="register" aria-label="Crear cuenta">
+  <div class="top"><span class="logo"><svg><use href="#fork"/></svg></span>Restaurant Fast</div>
+  <svg class="badge" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="57" fill="#ff7a1a" stroke="#111" stroke-width="3"/><path id="b2" d="M60 60m-40 0a40 40 0 1 1 80 0a40 40 0 1 1-80 0" fill="none"/><text font-family="DM Sans" font-weight="700" font-size="12.5" letter-spacing="2" fill="#111"><textPath href="#b2">PRIMER PEDIDO -20% · </textPath></text><circle cx="60" cy="60" r="14" fill="#b8f23a" stroke="#111" stroke-width="3"/></svg>
+  <h1>Únete y <mark>come</mark> primero.</h1>
+  <p class="sub">Tu cuenta lista en menos de un minuto.</p>
+  <form onsubmit="return false" style="display:flex;flex-direction:column;flex:1">
+    <label class="fld"><span>Nombre completo</span><div class="in"><input type="text" autocomplete="name" placeholder="Tu nombre"></div></label>
+    <label class="fld"><span>Correo</span><div class="in"><input type="email" autocomplete="email" placeholder="tu@correo.com"></div></label>
+    <label class="fld" style="margin-bottom:10px"><span>Contraseña</span><div class="in"><input id="rp" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres"><button type="button" data-eye="rp" aria-label="Mostrar u ocultar contraseña">Ver</button></div></label>
+    <div class="meter" id="m"><i></i><i></i><i></i><i></i></div>
+    <p class="hint" id="h" aria-live="polite">Mayúsculas, números y símbolos suman.</p>
+    <button class="cta">Crear cuenta</button>
+    <p class="swap">¿Ya tienes cuenta?<a href="#login">Entrar</a></p>
+  </form>
+</section>
+
+</div>
+<script>
+// shortcut: 4-rule count, upgrade to zxcvbn if you need real entropy
+var score=function(v){return(v.length>=8)+(/[A-Z]/.test(v)&&/[a-z]/.test(v))+/\d/.test(v)+/[^A-Za-z0-9]/.test(v)};
+console.assert(score('')===0&&score('abcdefgh')===1&&score('Abcdef1!')===4,'score self-check');
+document.querySelectorAll('[data-eye]').forEach(function(b){b.onclick=function(){var i=document.getElementById(b.dataset.eye);i.type=i.type==='password'?'text':'password'}});
+var p=document.getElementById('rp'),bars=document.querySelectorAll('#m i'),h=document.getElementById('h'),
+cols=['#ff5a4d','#ff7a1a','#ffd23a','#b8f23a'],tx=['Muy débil','Débil','Aceptable','¡Fuerte!'];
+p.oninput=function(){var s=score(p.value);bars.forEach(function(x,i){x.style.background=i<s?cols[s-1]:''});h.textContent=p.value?tx[Math.max(s-1,0)]:'Mayúsculas, números y símbolos suman.'};
+document.querySelectorAll('a[href^="#"]').forEach(function(a){a.onclick=function(e){var t=document.querySelector(a.getAttribute('href'));if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'center'})}}});
+</script>
+</body>
+</html>

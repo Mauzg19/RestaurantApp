@@ -11,21 +11,22 @@ class Address {
   final String postalCode;
   final String? notes;
 
-  String get fullAddress => '$street, $city, $postalCode${notes != null ? " ($notes)" : ""}';
+  String get fullAddress =>
+      '$street, $city, $postalCode${notes != null ? " ($notes)" : ""}';
 
   Map<String, dynamic> toJson() => {
-        'street': street,
-        'city': city,
-        'postal_code': postalCode,
-        'notes': notes,
-      };
+    'street': street,
+    'city': city,
+    'postal_code': postalCode,
+    'notes': notes,
+  };
 
   factory Address.fromJson(Map<String, dynamic> json) => Address(
-        street: json['street'] as String,
-        city: json['city'] as String,
-        postalCode: json['postal_code'] as String,
-        notes: json['notes'] as String?,
-      );
+    street: json['street'] as String,
+    city: json['city'] as String,
+    postalCode: json['postal_code'] as String,
+    notes: json['notes'] as String?,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -38,27 +39,22 @@ class Address {
           notes == other.notes;
 
   @override
-  int get hashCode => street.hashCode ^ city.hashCode ^ postalCode.hashCode ^ notes.hashCode;
+  int get hashCode =>
+      street.hashCode ^ city.hashCode ^ postalCode.hashCode ^ notes.hashCode;
 }
 
 class PaymentMethod {
-  const PaymentMethod({
-    required this.type,
-    required this.details,
-  });
+  const PaymentMethod({required this.type, required this.details});
 
   final String type; // e.g., 'Credit Card', 'PayPal', 'Cash'
   final String details; // e.g., '**** 1234'
 
-  Map<String, dynamic> toJson() => {
-        'type': type,
-        'details': details,
-      };
+  Map<String, dynamic> toJson() => {'type': type, 'details': details};
 
   factory PaymentMethod.fromJson(Map<String, dynamic> json) => PaymentMethod(
-        type: json['type'] as String,
-        details: json['details'] as String,
-      );
+    type: json['type'] as String,
+    details: json['details'] as String,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -88,13 +84,14 @@ class CustomerOrderItem {
   double get subtotal => unitPrice * quantity;
 
   Map<String, dynamic> toJson() => {
-        'product_id': productId,
-        'name': name,
-        'quantity': quantity,
-        'unit_price': unitPrice,
-      };
+    'product_id': productId,
+    'name': name,
+    'quantity': quantity,
+    'unit_price': unitPrice,
+  };
 
-  factory CustomerOrderItem.fromJson(Map<String, dynamic> json) => CustomerOrderItem(
+  factory CustomerOrderItem.fromJson(Map<String, dynamic> json) =>
+      CustomerOrderItem(
         productId: json['product_id']?.toString() ?? '',
         name: json['name']?.toString() ?? 'Producto',
         quantity: _toInt(json['quantity']),
@@ -110,6 +107,8 @@ class CustomerOrder {
     required this.items,
     required this.deliveryAddress,
     required this.paymentMethod,
+    this.paymentIntentId,
+    this.paymentStatus = 'pending',
     DateTime? createdAt,
     this.status = 'pending',
   }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
@@ -121,41 +120,46 @@ class CustomerOrder {
   final List<CustomerOrderItem> items;
   final Address deliveryAddress;
   final PaymentMethod paymentMethod;
+  final String? paymentIntentId;
+  final String paymentStatus;
   final DateTime createdAt;
   final String status;
 
   double get total => items.fold(0.0, (sum, item) => sum + item.subtotal);
 
-  String get summary => items
-      .map((item) => '${item.quantity}× ${item.name}')
-      .join(', ');
+  String get summary =>
+      items.map((item) => '${item.quantity}× ${item.name}').join(', ');
 
   CustomerOrder copyWith({String? status}) => CustomerOrder(
-        id: id,
-        customerName: customerName,
-        customerEmail: customerEmail,
-        items: items,
-        deliveryAddress: deliveryAddress,
-        paymentMethod: paymentMethod,
-        createdAt: createdAt,
-        status: status ?? this.status,
-      );
+    id: id,
+    customerName: customerName,
+    customerEmail: customerEmail,
+    items: items,
+    deliveryAddress: deliveryAddress,
+    paymentMethod: paymentMethod,
+    paymentIntentId: paymentIntentId,
+    paymentStatus: paymentStatus,
+    createdAt: createdAt,
+    status: status ?? this.status,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'customer_name': customerName,
-        'customer_email': customerEmail,
-        'items': items.map((i) => i.toJson()).toList(),
-        'delivery_street': deliveryAddress.street,
-        'delivery_city': deliveryAddress.city,
-        'delivery_postal_code': deliveryAddress.postalCode,
-        'delivery_notes': deliveryAddress.notes,
-        'payment_type': paymentMethod.type,
-        'payment_details': paymentMethod.details,
-        'status': status,
-        'created_at': createdAt.toUtc().toIso8601String(),
-        'total': total,
-      };
+    'id': id,
+    'customer_name': customerName,
+    'customer_email': customerEmail,
+    'items': items.map((i) => i.toJson()).toList(),
+    'delivery_street': deliveryAddress.street,
+    'delivery_city': deliveryAddress.city,
+    'delivery_postal_code': deliveryAddress.postalCode,
+    'delivery_notes': deliveryAddress.notes,
+    'payment_type': paymentMethod.type,
+    'payment_details': paymentMethod.details,
+    'payment_intent_id': paymentIntentId,
+    'payment_status': paymentStatus,
+    'status': status,
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'total': total,
+  };
 
   factory CustomerOrder.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -164,13 +168,12 @@ class CustomerOrder {
       id: json['id']?.toString() ?? '',
       customerName: json['customer_name'] as String? ?? '',
       customerEmail: json['customer_email'] as String? ?? '',
-        items: itemsJson
-            .whereType<Map>()
-            .map(
-              (item) => CustomerOrderItem.fromJson(
-                Map<String, dynamic>.from(item),
-              ),
-            )
+      items: itemsJson
+          .whereType<Map>()
+          .map(
+            (item) =>
+                CustomerOrderItem.fromJson(Map<String, dynamic>.from(item)),
+          )
           .toList(),
       deliveryAddress: Address(
         street: json['delivery_street'] as String? ?? '',
@@ -182,12 +185,18 @@ class CustomerOrder {
         type: json['payment_type'] as String? ?? '',
         details: json['payment_details'] as String? ?? '',
       ),
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      paymentIntentId: json['payment_intent_id'] as String?,
+      paymentStatus: json['payment_status'] as String? ?? 'pending',
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       status: json['status'] as String? ?? 'pending',
     );
   }
 }
 
-int _toInt(dynamic value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+int _toInt(dynamic value) =>
+    value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
-double _toDouble(dynamic value) => value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
+double _toDouble(dynamic value) =>
+    value is num ? value.toDouble() : double.tryParse('$value') ?? 0;

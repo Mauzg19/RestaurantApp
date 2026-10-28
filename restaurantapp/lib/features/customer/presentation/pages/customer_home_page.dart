@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/services/biometric_auth_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
 import '../../data/repositories/order_repository_impl.dart';
@@ -10,6 +12,7 @@ import '../../domain/entities/product.dart';
 import '../../domain/repositories/order_repository.dart';
 import '../../domain/repositories/user_settings_repository.dart';
 import '../../domain/usecases/get_products.dart';
+import '../../data/services/payment_service.dart';
 import 'customer_orders_page.dart';
 import 'customer_details_page.dart';
 import 'product_detail_page.dart';
@@ -21,6 +24,7 @@ class CustomerHomePage extends StatefulWidget {
     required this.getProducts,
     this.orderRepository,
     this.settingsRepository,
+    this.paymentService,
     this.onLogout,
   });
 
@@ -28,6 +32,7 @@ class CustomerHomePage extends StatefulWidget {
   final GetProducts getProducts;
   final OrderRepository? orderRepository;
   final UserSettingsRepository? settingsRepository;
+  final PaymentService? paymentService;
   final void Function(BuildContext)? onLogout;
 
   @override
@@ -37,9 +42,32 @@ class CustomerHomePage extends StatefulWidget {
 class _CustomerHomePageState extends State<CustomerHomePage> {
   int _selectedTab = 0;
   final TextEditingController _searchController = TextEditingController();
-  ProductCategory? _selectedCategory;
+  String? _selectedCategory;
+  List<ProductCategoryOption> _categories = const [];
   final Map<String, int> _cart = {};
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCategories());
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await widget.getProducts.getCategories();
+      if (!mounted) return;
+      setState(() => _categories = categories);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudieron cargar las categorías: $error'),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
+    }
+  }
 
   List<Product> get _products => widget.getProducts();
 
@@ -48,31 +76,38 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     return _products.where((product) {
       if (!product.isAvailable) return false;
+      final productCategory = product.categoryName ?? product.category.label;
       final matchesCategory =
-          _selectedCategory == null || product.category == _selectedCategory;
+          _selectedCategory == null ||
+          productCategory.toLowerCase() == _selectedCategory!.toLowerCase();
       final matchesQuery =
           query.isEmpty ||
           product.name.toLowerCase().contains(query) ||
-          product.category.label.toLowerCase().contains(query);
+          (product.categoryName ?? product.category.label)
+              .toLowerCase()
+              .contains(query);
       return matchesCategory && matchesQuery;
     }).toList();
   }
 
   List<_CartLine> get _cartLines {
-    return _cart.entries.map((entry) {
-      final product = _products.firstWhere(
-        (item) => item.id == entry.key,
-        orElse: () => const Product(
-          id: '',
-          name: 'Producto',
-          category: ProductCategory.bowls,
-          price: 0,
-          icon: Icons.fastfood,
-          accentColor: Color(0xFFC95D32),
-        ),
-      );
-      return _CartLine(product: product, quantity: entry.value);
-    }).where((line) => line.product.id.isNotEmpty).toList();
+    return _cart.entries
+        .map((entry) {
+          final product = _products.firstWhere(
+            (item) => item.id == entry.key,
+            orElse: () => const Product(
+              id: '',
+              name: 'Producto',
+              category: ProductCategory.bowls,
+              price: 0,
+              icon: Icons.fastfood,
+              accentColor: Color(0xFFC95D32),
+            ),
+          );
+          return _CartLine(product: product, quantity: entry.value);
+        })
+        .where((line) => line.product.id.isNotEmpty)
+        .toList();
   }
 
   int get cartCount =>
@@ -120,9 +155,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     });
 
     if ((context != null) && (_cart.isEmpty || wasEmptyBefore)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tu carrito está vacío.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Tu carrito está vacío.')));
       if (_cart.isEmpty) {
         Navigator.of(context).pop();
       }
@@ -132,9 +167,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   Future<void> _confirmOrder(BuildContext context) async {
     if (_cart.isEmpty || widget.orderRepository == null) {
       if (_cart.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tu carrito está vacío.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tu carrito está vacío.')));
       }
       return;
     }
@@ -163,17 +198,57 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       return;
     }
 
-    final address = await widget.settingsRepository!.getDeliveryAddress(widget.user.email);
-    final payment = await widget.settingsRepository!.getPaymentMethod(widget.user.email);
+    final address = await widget.settingsRepository!.getDeliveryAddress(
+      widget.user.email,
+    );
+    if (!context.mounted) return;
+    PaymentMethod? savedPayment;
+    if (widget.paymentService == null &&
+        !(widget.orderRepository?.requiresCheckout ?? false)) {
+      savedPayment = await widget.settingsRepository!.getPaymentMethod(
+        widget.user.email,
+      );
+    }
+    if (!context.mounted) return;
 
-    if (address == null || payment == null) {
+    if (address == null ||
+        (widget.paymentService == null &&
+            !(widget.orderRepository?.requiresCheckout ?? false) &&
+            savedPayment == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor, completa tus datos de entrega y pago en tu perfil.'),
+          content: Text(
+            'Por favor, completa tus datos de entrega y pago en tu perfil.',
+          ),
           backgroundColor: Color(0xFFB76A1A),
         ),
       );
       _goToDetails();
+      return;
+    }
+
+    PaymentResult? paymentResult;
+    try {
+      paymentResult = await widget.paymentService?.pay(
+        amountInCents: (cartTotal * 100).round(),
+        currency: 'cop',
+        items: _cartLines
+            .map(
+              (line) => {
+                'product_id': line.product.id,
+                'quantity': line.quantity,
+              },
+            )
+            .toList(),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo completar el pago: $error'),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
       return;
     }
 
@@ -191,15 +266,32 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           )
           .toList(),
       deliveryAddress: address,
-      paymentMethod: payment,
+      paymentMethod: paymentResult == null
+          ? savedPayment ??
+                const PaymentMethod(
+                  type: 'Stripe checkout',
+                  details: 'Pendiente',
+                )
+          : const PaymentMethod(type: 'Stripe', details: 'Pago con Stripe'),
+      paymentIntentId: paymentResult?.paymentIntentId,
+      paymentStatus: paymentResult?.status ?? 'pending',
     );
 
     try {
-      await widget.orderRepository!.saveOrder(order);
+      final paymentUrl = await widget.orderRepository!.saveOrder(order);
       // Forzamos la recarga de pedidos para que se vean reflejados inmediatamente
       await widget.orderRepository!.load();
+      if (widget.orderRepository!.requiresCheckout) {
+        final uri = Uri.tryParse(paymentUrl ?? '');
+        if (uri == null ||
+            !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+          throw StateError(
+            'El pedido se guardó en el backend, pero no se pudo abrir su enlace de pago.',
+          );
+        }
+      }
     } catch (error) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No se pudo guardar el pedido: $error'),
@@ -209,13 +301,12 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       return;
     }
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     setState(() => _cart.clear());
-    Navigator.pop(this.context);
-    ScaffoldMessenger.of(this.context).showSnackBar(
-      const SnackBar(content: Text('Pedido confirmado.')),
-    );
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Pedido confirmado.')));
   }
 
   void _onSearchChanged(String value) {
@@ -226,9 +317,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   void _openCartSheet(BuildContext context) {
     if (_cart.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tu carrito está vacío.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Tu carrito está vacío.')));
       return;
     }
 
@@ -275,40 +366,46 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: _cartLines.map(
-                        (line) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: () =>
-                                    _removeFromCart(line.product.id, context),
-                                icon: const Icon(
-                                  Icons.remove_circle_outline,
-                                  color: AppTheme.accent,
-                                ),
-                                tooltip: 'Quitar producto',
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '${line.quantity}× ${line.product.name}',
-                                  style: const TextStyle(
-                                    color: Color(0xFF3B2115),
-                                    fontWeight: FontWeight.w600,
+                      children: _cartLines
+                          .map(
+                            (line) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    onPressed: () => _removeFromCart(
+                                      line.product.id,
+                                      context,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                      color: AppTheme.accent,
+                                    ),
+                                    tooltip: 'Quitar producto',
                                   ),
-                                ),
+                                  Expanded(
+                                    child: Text(
+                                      '${line.quantity}× ${line.product.name}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF3B2115),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    formatCop(
+                                      line.product.price * line.quantity,
+                                    ),
+                                    style: const TextStyle(
+                                      color: AppTheme.accent,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '£${(line.product.price * line.quantity).toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: AppTheme.accent,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ).toList(),
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                 ),
@@ -326,7 +423,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                       ),
                     ),
                     Text(
-                      '£${cartTotal.toStringAsFixed(2)}',
+                      formatCop(cartTotal),
                       style: const TextStyle(
                         color: Color(0xFF3B2115),
                         fontWeight: FontWeight.bold,
@@ -381,6 +478,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         builder: (_) => CustomerDetailsPage(
           user: widget.user,
           settingsRepository: widget.settingsRepository!,
+          collectPaymentMethod:
+              !(widget.orderRepository?.requiresCheckout ?? false),
         ),
       ),
     );
@@ -440,10 +539,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     const SizedBox(height: 12),
                     const Text(
                       'No tienes notificaciones nuevas',
-                      style: TextStyle(
-                        color: Color(0xFF937A6B),
-                        fontSize: 15,
-                      ),
+                      style: TextStyle(color: Color(0xFF937A6B), fontSize: 15),
                     ),
                   ],
                 ),
@@ -473,6 +569,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             _HomeContent(
               user: widget.user,
               searchController: _searchController,
+              categories: _categories,
               selectedCategory: _selectedCategory,
               onCategoryChanged: (category) =>
                   setState(() => _selectedCategory = category),
@@ -487,6 +584,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             ),
             _MenuTab(
               searchController: _searchController,
+              categories: _categories,
               products: _filteredProducts,
               selectedCategory: _selectedCategory,
               onCategoryChanged: (category) =>
@@ -501,10 +599,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               user: widget.user,
               orderRepository: widget.orderRepository ?? OrderRepositoryImpl(),
             ),
-            _SimpleTab(
-              title: 'Recompensas',
-              icon: Icons.star_border_rounded,
-            ),
+            _SimpleTab(title: 'Recompensas', icon: Icons.star_border_rounded),
             _ProfileTab(
               user: widget.user,
               onLogout: _handleLogout,
@@ -561,6 +656,7 @@ class _HomeContent extends StatelessWidget {
   const _HomeContent({
     required this.user,
     required this.searchController,
+    required this.categories,
     required this.selectedCategory,
     required this.onCategoryChanged,
     required this.onSearchChanged,
@@ -575,8 +671,9 @@ class _HomeContent extends StatelessWidget {
 
   final AuthUser user;
   final TextEditingController searchController;
-  final ProductCategory? selectedCategory;
-  final ValueChanged<ProductCategory?> onCategoryChanged;
+  final List<ProductCategoryOption> categories;
+  final String? selectedCategory;
+  final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<String> onSearchChanged;
   final List<Product> products;
   final int cartCount;
@@ -643,7 +740,10 @@ class _HomeContent extends StatelessWidget {
                 ],
               ),
               const SizedBox(width: 8),
-              _HeaderIcon(icon: Icons.person_outline_rounded, onPressed: onProfileTap),
+              _HeaderIcon(
+                icon: Icons.person_outline_rounded,
+                onPressed: onProfileTap,
+              ),
               const SizedBox(width: 8),
               _HeaderIcon(
                 icon: Icons.notifications_none_rounded,
@@ -661,6 +761,7 @@ class _HomeContent extends StatelessWidget {
           const _SectionTitle(title: 'Categorías', action: 'Ver todas'),
           const SizedBox(height: 12),
           _CategoryRow(
+            categories: categories,
             selectedCategory: selectedCategory,
             onCategoryChanged: onCategoryChanged,
           ),
@@ -713,7 +814,6 @@ class _HeaderIcon extends StatelessWidget {
   );
 }
 
-
 class _SearchBar extends StatelessWidget {
   const _SearchBar({required this.controller, required this.onChanged});
 
@@ -759,10 +859,7 @@ class _WelcomeText extends StatelessWidget {
 // ── Hero Carousel ──────────────────────────────────────────────────────────────
 
 class _HeroCarousel extends StatefulWidget {
-  const _HeroCarousel({
-    required this.products,
-    required this.onAddToCart,
-  });
+  const _HeroCarousel({required this.products, required this.onAddToCart});
 
   final List<Product> products;
   final ValueChanged<Product> onAddToCart;
@@ -866,9 +963,7 @@ class _HeroCarouselState extends State<_HeroCarousel> {
                 width: isActive ? 22 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isActive
-                      ? AppTheme.accent
-                      : const Color(0xFFEBDCCE),
+                  color: isActive ? AppTheme.accent : const Color(0xFFEBDCCE),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -936,7 +1031,8 @@ class _HeroSlide extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    product.category.label.toUpperCase(),
+                    (product.categoryName ?? product.category.label)
+                        .toUpperCase(),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 9,
@@ -1039,20 +1135,60 @@ class _SectionTitle extends StatelessWidget {
 
 class _CategoryRow extends StatelessWidget {
   const _CategoryRow({
+    required this.categories,
     required this.selectedCategory,
     required this.onCategoryChanged,
   });
 
-  final ProductCategory? selectedCategory;
-  final ValueChanged<ProductCategory?> onCategoryChanged;
+  final List<ProductCategoryOption> categories;
+  final String? selectedCategory;
+  final ValueChanged<String?> onCategoryChanged;
 
-  static const categories = [
-    (ProductCategory.burritos, 'Burritos', Icons.lunch_dining),
-    (ProductCategory.tacos, 'Tacos', Icons.local_pizza),
-    (ProductCategory.bowls, 'Bowls', Icons.rice_bowl),
-    (ProductCategory.sides, 'Sides', Icons.fastfood),
-    (ProductCategory.drinks, 'Drinks', Icons.local_drink),
-  ];
+  IconData _iconFor(String name) {
+    final normalized = name
+        .toLowerCase()
+        .replaceAll(RegExp('[áàä]'), 'a')
+        .replaceAll(RegExp('[éèë]'), 'e')
+        .replaceAll(RegExp('[íìï]'), 'i')
+        .replaceAll(RegExp('[óòö]'), 'o')
+        .replaceAll(RegExp('[úùü]'), 'u');
+    if (normalized.contains('hamburgues') ||
+        normalized.contains('hamburger') ||
+        normalized.contains('burger') ||
+        normalized.contains('burrito')) {
+      return Icons.lunch_dining;
+    }
+    if (normalized.contains('nacho')) return Icons.tapas;
+    if (normalized.contains('perro caliente') ||
+        normalized.contains('hot dog') ||
+        normalized.contains('hotdog')) {
+      return Icons.kebab_dining;
+    }
+    if (normalized.contains('pizza')) return Icons.local_pizza;
+    if (normalized.contains('pollo') ||
+        normalized.contains('chicken') ||
+        normalized.contains('fried chicken')) {
+      return Icons.set_meal;
+    }
+    if (normalized.contains('taco')) return Icons.tapas;
+    if (normalized.contains('bowl')) return Icons.rice_bowl;
+    if (normalized.contains('drink') || normalized.contains('bebida')) {
+      return Icons.local_drink;
+    }
+    if (normalized.contains('postre') ||
+        normalized.contains('dessert') ||
+        normalized.contains('helado') ||
+        normalized.contains('ice cream')) {
+      return Icons.icecream;
+    }
+    if (normalized.contains('papas') ||
+        normalized.contains('fries') ||
+        normalized.contains('side') ||
+        normalized.contains('acompan')) {
+      return Icons.fastfood;
+    }
+    return Icons.restaurant_menu;
+  }
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -1070,14 +1206,16 @@ class _CategoryRow extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           ...categories.map((category) {
-            final isSelected = selectedCategory == category.$1;
+            final isSelected =
+                selectedCategory?.toLowerCase() == category.name.toLowerCase();
             return Padding(
               padding: const EdgeInsets.only(right: 16),
               child: _CategoryChip(
-                label: category.$2,
-                icon: category.$3,
+                label: category.name,
+                icon: _iconFor(category.name),
                 selected: isSelected,
-                onTap: () => onCategoryChanged(isSelected ? null : category.$1),
+                onTap: () =>
+                    onCategoryChanged(isSelected ? null : category.name),
               ),
             );
           }),
@@ -1126,7 +1264,11 @@ class _CategoryChip extends StatelessWidget {
 }
 
 class _ProductRow extends StatelessWidget {
-  const _ProductRow({required this.products, required this.onAddToCart, required this.onProductTap});
+  const _ProductRow({
+    required this.products,
+    required this.onAddToCart,
+    required this.onProductTap,
+  });
 
   final List<Product> products;
   final ValueChanged<Product> onAddToCart;
@@ -1173,60 +1315,61 @@ class _ProductRow extends StatelessWidget {
                       onTap: () => onProductTap(product),
                       borderRadius: BorderRadius.circular(12),
                       child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: 104,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFE5BF),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: _ProductVisual(product: product),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          product.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF3B2115),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          runSpacing: 6,
-                          spacing: 6,
-                          children: [
-                            Text(
-                              product.formattedPrice,
-                              style: const TextStyle(
-                                color: AppTheme.accent,
-                                fontWeight: FontWeight.bold,
-                              ),
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 104,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFE5BF),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            FilledButton.icon(
-                              onPressed: () => onAddToCart(product),
-                              icon: const Icon(Icons.add, size: 15),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppTheme.accent,
-                                minimumSize: const Size(0, 30),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
+                            child: _ProductVisual(product: product),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            product.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF3B2115),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            runSpacing: 6,
+                            spacing: 6,
+                            children: [
+                              Text(
+                                product.formattedPrice,
+                                style: const TextStyle(
+                                  color: AppTheme.accent,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
                               ),
-                              label: const Text('Añadir'),
-                            ),
-                          ],
-                        ),
-                      ],
+                              FilledButton.icon(
+                                onPressed: () => onAddToCart(product),
+                                icon: const Icon(Icons.add, size: 15),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.accent,
+                                  minimumSize: const Size(0, 30),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                label: const Text('Añadir'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1243,6 +1386,7 @@ class _ProductRow extends StatelessWidget {
 class _MenuTab extends StatelessWidget {
   const _MenuTab({
     required this.searchController,
+    required this.categories,
     required this.products,
     required this.selectedCategory,
     required this.onCategoryChanged,
@@ -1254,9 +1398,10 @@ class _MenuTab extends StatelessWidget {
   });
 
   final TextEditingController searchController;
+  final List<ProductCategoryOption> categories;
   final List<Product> products;
-  final ProductCategory? selectedCategory;
-  final ValueChanged<ProductCategory?> onCategoryChanged;
+  final String? selectedCategory;
+  final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<Product> onAddToCart;
   final ValueChanged<Product> onProductTap;
@@ -1320,9 +1465,13 @@ class _MenuTab extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 18),
-              _SearchBar(controller: searchController, onChanged: onSearchChanged),
+              _SearchBar(
+                controller: searchController,
+                onChanged: onSearchChanged,
+              ),
               const SizedBox(height: 18),
               _CategoryRow(
+                categories: categories,
                 selectedCategory: selectedCategory,
                 onCategoryChanged: onCategoryChanged,
               ),
@@ -1339,11 +1488,11 @@ class _MenuTab extends StatelessWidget {
                         itemCount: products.length,
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          mainAxisExtent: 185,
-                        ),
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              mainAxisExtent: 185,
+                            ),
                         itemBuilder: (context, index) {
                           final product = products[index];
                           return Container(
@@ -1359,60 +1508,61 @@ class _MenuTab extends StatelessWidget {
                               onTap: () => onProductTap(product),
                               borderRadius: BorderRadius.circular(12),
                               child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    height: 74,
-                                    color: const Color(0xFFFFE5BF),
-                                    child: _ProductVisual(product: product),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  product.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Color(0xFF3B2115),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  runSpacing: 4,
-                                  spacing: 4,
-                                  children: [
-                                    Text(
-                                      product.formattedPrice,
-                                      style: const TextStyle(
-                                        color: AppTheme.accent,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      height: 74,
+                                      color: const Color(0xFFFFE5BF),
+                                      child: _ProductVisual(product: product),
                                     ),
-                                    FilledButton.icon(
-                                      onPressed: () => onAddToCart(product),
-                                      icon: const Icon(Icons.add, size: 14),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AppTheme.accent,
-                                        minimumSize: const Size(0, 28),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    product.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF3B2115),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    runSpacing: 4,
+                                    spacing: 4,
+                                    children: [
+                                      Text(
+                                        product.formattedPrice,
+                                        style: const TextStyle(
+                                          color: AppTheme.accent,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        visualDensity: VisualDensity.compact,
                                       ),
-                                      label: const Text('Añadir'),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                      FilledButton.icon(
+                                        onPressed: () => onAddToCart(product),
+                                        icon: const Icon(Icons.add, size: 14),
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: AppTheme.accent,
+                                          minimumSize: const Size(0, 28),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        label: const Text('Añadir'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
                           );
@@ -1598,7 +1748,7 @@ class _SimpleTab extends StatelessWidget {
   );
 }
 
-class _ProfileTab extends StatelessWidget {
+class _ProfileTab extends StatefulWidget {
   const _ProfileTab({
     required this.user,
     required this.onLogout,
@@ -1608,6 +1758,75 @@ class _ProfileTab extends StatelessWidget {
   final AuthUser user;
   final void Function(BuildContext) onLogout;
   final VoidCallback onDetailsTap;
+
+  @override
+  State<_ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<_ProfileTab> {
+  final BiometricAuthService _biometricService = BiometricAuthService.instance;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricState();
+  }
+
+  Future<void> _loadBiometricState() async {
+    final available = await _biometricService.canCheckBiometrics();
+    final enabled = await _biometricService.isBiometricLoginEnabled();
+    if (!mounted) return;
+    setState(() {
+      _biometricAvailable = available;
+      _biometricEnabled = enabled;
+      _loading = false;
+    });
+  }
+
+  Future<void> _toggleBiometric(bool value) async {
+    if (value) {
+      final authenticated = await _biometricService.authenticate(
+        reason: 'Confirma tu huella para activar el inicio rápido',
+      );
+      if (!authenticated) return;
+      final credentials = await _biometricService.getStoredCredentials();
+      if (credentials == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Primero inicia sesión con correo y contraseña para guardar tus credenciales.',
+            ),
+            backgroundColor: Color(0xFFB76A1A),
+          ),
+        );
+        return;
+      }
+      await _biometricService.enableBiometricLogin(
+        email: credentials.email,
+        password: credentials.password,
+      );
+    } else {
+      await _biometricService.disableBiometricLogin();
+    }
+    if (!mounted) return;
+    setState(() => _biometricEnabled = value);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          value
+              ? 'Huella digital activada. Podrás iniciar sesión con tu huella.'
+              : 'Huella digital desactivada.',
+        ),
+        backgroundColor: value
+            ? const Color(0xFF2E7D32)
+            : const Color(0xFF563524),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -1650,7 +1869,7 @@ class _ProfileTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user.fullName,
+                        widget.user.fullName,
                         style: const TextStyle(
                           color: Color(0xFF3B2115),
                           fontWeight: FontWeight.bold,
@@ -1659,7 +1878,7 @@ class _ProfileTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        user.email,
+                        widget.user.email,
                         style: const TextStyle(
                           color: Color(0xFF937A6B),
                           fontSize: 13,
@@ -1682,23 +1901,56 @@ class _ProfileTab extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           ListTile(
-            leading: const Icon(Icons.location_on_outlined, color: AppTheme.accent),
+            leading: const Icon(
+              Icons.location_on_outlined,
+              color: AppTheme.accent,
+            ),
             title: const Text('Datos de entrega y pago'),
             subtitle: const Text('Gestionar dirección y método de pago'),
             trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: onDetailsTap,
+            onTap: widget.onDetailsTap,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
             tileColor: Colors.white,
           ),
+          if (_biometricAvailable && !_loading) ...[
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: SwitchListTile(
+                secondary: Icon(
+                  Icons.fingerprint,
+                  color: _biometricEnabled
+                      ? const Color(0xFF2E7D32)
+                      : AppTheme.accent,
+                  size: 28,
+                ),
+                title: const Text('Huella digital'),
+                subtitle: Text(
+                  _biometricEnabled
+                      ? 'Inicio rápido activado'
+                      : 'Activa el inicio de sesión con huella',
+                ),
+                value: _biometricEnabled,
+                onChanged: _toggleBiometric,
+                activeColor: const Color(0xFF2E7D32),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           ListTile(
             leading: const Icon(Icons.logout_rounded, color: AppTheme.accent),
             title: const Text('Cerrar sesión'),
             subtitle: const Text('Salir de la cuenta actual'),
             trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => onLogout(context),
+            onTap: () => widget.onLogout(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),

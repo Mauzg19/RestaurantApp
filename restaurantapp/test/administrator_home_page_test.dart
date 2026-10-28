@@ -9,6 +9,7 @@ import 'package:restaurantapp/features/auth/domain/entities/auth_user.dart';
 import 'package:restaurantapp/features/customer/data/repositories/order_repository_impl.dart';
 import 'package:restaurantapp/features/customer/data/repositories/product_repository_impl.dart';
 import 'package:restaurantapp/features/customer/domain/entities/order.dart';
+import 'package:restaurantapp/features/customer/domain/entities/product.dart';
 
 void main() {
   testWidgets('el administrador puede marcar un producto como agotado', (
@@ -44,7 +45,8 @@ void main() {
     expect(find.text('Agotado'), findsAtLeastNWidgets(1));
   });
 
-  Widget buildSubject() {
+  Widget buildSubject({ProductRepositoryImpl? productRepository}) {
+    final repository = productRepository ?? ProductRepositoryImpl();
     return MaterialApp(
       theme: AppTheme.dark,
       home: AdministratorHomePage(
@@ -54,9 +56,9 @@ void main() {
           role: AuthRole.administrator,
         ),
         getDashboard: GetAdministratorDashboard(
-          AdministratorRepositoryImpl(ProductRepositoryImpl()),
+          AdministratorRepositoryImpl(repository),
         ),
-        productRepository: ProductRepositoryImpl(),
+        productRepository: repository,
         onLogout: (context) {},
       ),
     );
@@ -77,10 +79,26 @@ void main() {
     expect(find.text('Listo'), findsOneWidget);
   });
 
+  testWidgets('conserva vacía la sección de predicción IA', (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.text('Predicción IA'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      3,
+    );
+    expect(find.text('Predicción IA'), findsOneWidget);
+    expect(find.textContaining('Weka'), findsNothing);
+    expect(find.textContaining('predicción generada'), findsNothing);
+  });
+
   testWidgets('filtra pedidos y permite crear un producto en inventario', (
     tester,
   ) async {
-    await tester.pumpWidget(buildSubject());
+    final productRepository = ProductRepositoryImpl();
+    await tester.pumpWidget(buildSubject(productRepository: productRepository));
 
     await tester.tap(find.text('Inventario'));
     await tester.pump();
@@ -93,14 +111,26 @@ void main() {
 
     final formFields = find.byType(TextFormField);
     await tester.enterText(formFields.at(0), 'Ensalada Fresh');
-    await tester.enterText(formFields.at(1), 'Bowls');
-    await tester.enterText(formFields.at(2), '7.50');
-    await tester.enterText(formFields.at(3), '20');
+    await tester.tap(
+      find.byType(DropdownButtonFormField<ProductCategoryOption>),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bowls').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(formFields.at(1), '7500');
+    await tester.enterText(formFields.at(2), '20');
     final saveButton = find.text('Guardar');
     await tester.ensureVisible(saveButton);
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
 
+    expect(
+      productRepository
+          .getProducts()
+          .singleWhere((product) => product.name == 'Ensalada Fresh')
+          .categoryName,
+      'Bowls',
+    );
     await tester.enterText(find.byType(TextField), 'Ensalada');
     await tester.pump();
     expect(find.text('Ensalada Fresh'), findsOneWidget);
@@ -114,60 +144,64 @@ void main() {
     expect(find.textContaining('#1048'), findsNothing);
   });
 
-  testWidgets('muestra un pedido guardado en el repositorio del administrador', (
-    tester,
-  ) async {
-    final orderRepository = OrderRepositoryImpl();
-    await orderRepository.saveOrder(
-      CustomerOrder(
-        customerName: 'Ana López',
-        customerEmail: 'ana@example.com',
-        items: [
-          CustomerOrderItem(
-            productId: 'bowl-bbq',
-            name: 'Bowl BBQ',
-            quantity: 1,
-            unitPrice: 8.25,
+  testWidgets(
+    'muestra un pedido guardado en el repositorio del administrador',
+    (tester) async {
+      final orderRepository = OrderRepositoryImpl();
+      await orderRepository.saveOrder(
+        CustomerOrder(
+          customerName: 'Ana López',
+          customerEmail: 'ana@example.com',
+          items: [
+            CustomerOrderItem(
+              productId: 'bowl-bbq',
+              name: 'Bowl BBQ',
+              quantity: 1,
+              unitPrice: 8.25,
+            ),
+          ],
+          deliveryAddress: const Address(
+            street: 'Calle Falsa 123',
+            city: 'Ciudad Ejemplo',
+            postalCode: '12345',
           ),
-        ],
-        deliveryAddress: const Address(
-          street: 'Calle Falsa 123',
-          city: 'Ciudad Ejemplo',
-          postalCode: '12345',
-        ),
-        paymentMethod: const PaymentMethod(
-          type: 'Tarjeta',
-          details: '**** 1234',
-        ),
-      ),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark,
-        home: AdministratorHomePage(
-          user: const AuthUser(
-            fullName: 'Admin Principal',
-            email: 'admin@example.com',
-            role: AuthRole.administrator,
+          paymentMethod: const PaymentMethod(
+            type: 'Tarjeta',
+            details: '**** 1234',
           ),
-          getDashboard: GetAdministratorDashboard(
-            AdministratorRepositoryImpl(ProductRepositoryImpl(), orderRepository),
-          ),
-          productRepository: ProductRepositoryImpl(),
-          orderRepository: orderRepository,
-          onLogout: (context) {},
         ),
-      ),
-    );
+      );
 
-    expect(find.textContaining('Ana López'), findsOneWidget);
-    expect(find.textContaining('Bowl BBQ'), findsAtLeastNWidgets(1));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: AdministratorHomePage(
+            user: const AuthUser(
+              fullName: 'Admin Principal',
+              email: 'admin@example.com',
+              role: AuthRole.administrator,
+            ),
+            getDashboard: GetAdministratorDashboard(
+              AdministratorRepositoryImpl(
+                ProductRepositoryImpl(),
+                orderRepository,
+              ),
+            ),
+            productRepository: ProductRepositoryImpl(),
+            orderRepository: orderRepository,
+            onLogout: (context) {},
+          ),
+        ),
+      );
 
-    await orderRepository.updateOrderStatus(
-      orderRepository.getOrders().single.id,
-      'delivered',
-    );
-    expect(orderRepository.getOrders().single.status, 'delivered');
-  });
+      expect(find.textContaining('Ana López'), findsOneWidget);
+      expect(find.textContaining('Bowl BBQ'), findsAtLeastNWidgets(1));
+
+      await orderRepository.updateOrderStatus(
+        orderRepository.getOrders().single.id,
+        'delivered',
+      );
+      expect(orderRepository.getOrders().single.status, 'delivered');
+    },
+  );
 }

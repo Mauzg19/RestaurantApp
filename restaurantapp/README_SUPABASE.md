@@ -51,6 +51,31 @@ Sin `SUPABASE_ANON_KEY`, la app usa los repositorios locales para desarrollo y p
 La Secret key compartida durante la configuración debe revocarse y regenerarse desde
 Project Settings > API. No es necesaria para esta aplicación móvil o de escritorio.
 
+## Pagos con Stripe
+
+El checkout usa Stripe PaymentSheet. La clave publicable se puede pasar a Flutter
+sin riesgo mediante `--dart-define`; la clave secreta solo se configura como secreto
+de Supabase:
+
+```powershell
+supabase secrets set STRIPE_SECRET_KEY=sk_test_REEMPLAZAR
+supabase functions deploy create-payment-intent
+flutter run --dart-define=SUPABASE_ANON_KEY=TU_PUBLISHABLE_KEY --dart-define=STRIPE_PUBLISHABLE_KEY=pk_test_REEMPLAZAR
+```
+
+En Web, el botón abre Stripe Checkout en una pestaña nueva. La función debe
+desplegarse nuevamente después de actualizar el código para habilitar ese flujo.
+
+Antes de desplegar, ejecuta de nuevo `supabase/schema.sql` para añadir los campos
+`payment_intent_id` y `payment_status` en `public.orders`. La Edge Function calcula
+el total consultando `public.products`, valida la sesión y crea el PaymentIntent;
+Flutter nunca recibe ni contiene la clave secreta.
+
+Usa una tarjeta de prueba de Stripe, por ejemplo `4242 4242 4242 4242`, con una
+fecha futura y cualquier CVC. En producción cambia ambas claves por las de live,
+configura webhooks de Stripe para reconciliar estados y revoca inmediatamente la
+clave secreta que se compartió durante la configuración.
+
 ## Error `email rate limit exceeded`
 
 Este error pertenece al correo de autenticación de Supabase. Para desarrollo:

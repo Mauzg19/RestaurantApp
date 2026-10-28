@@ -18,10 +18,7 @@ class SupabaseProductRepository implements ProductRepository {
   @override
   Future<void> load() async {
     try {
-      final rows = await client
-          .from('products')
-          .select()
-          .order('created_at');
+      final rows = await client.from('products').select().order('created_at');
       final remoteProducts = rows.map(_fromRow).toList();
       _products
         ..clear()
@@ -35,7 +32,25 @@ class SupabaseProductRepository implements ProductRepository {
   List<Product> getProducts() => List.unmodifiable(_products);
 
   @override
-  void saveProduct(Product product) {
+  Future<List<ProductCategoryOption>> getCategories() async {
+    final categories = <String, ProductCategoryOption>{};
+    for (final product in _products) {
+      final name = (product.categoryName ?? product.category.label).trim();
+      if (name.isNotEmpty) {
+        categories.putIfAbsent(
+          name.toLowerCase(),
+          () => ProductCategoryOption(name: name),
+        );
+      }
+    }
+    return categories.values.toList();
+  }
+
+  @override
+  Future<void> saveProduct(
+    Product product, {
+    ProductCategoryOption? category,
+  }) async {
     final index = _products.indexWhere((current) => current.id == product.id);
     if (index == -1) {
       _products.add(product);
@@ -141,6 +156,7 @@ class SupabaseProductRepository implements ProductRepository {
       price: (row['price'] as num).toDouble(),
       icon: category.icon,
       accentColor: const Color(0xFFC95D32),
+      categoryName: category.label,
       imagePath: row['image_url'] as String?,
       isAvailable: row['is_available'] as bool? ?? true,
     );

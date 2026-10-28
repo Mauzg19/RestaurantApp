@@ -18,7 +18,7 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
           .maybeSingle();
 
       if (data == null) return null;
-      return Address.fromJson(data as Map<String, dynamic>);
+      return Address.fromJson(data);
     } catch (_) {
       return null;
     }
@@ -49,7 +49,7 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
           .maybeSingle();
 
       if (data == null) return null;
-      final row = data as Map<String, dynamic>;
+      final row = data;
       return PaymentMethod(
         type: row['payment_type'] as String? ?? '',
         details: row['payment_details'] as String? ?? '',

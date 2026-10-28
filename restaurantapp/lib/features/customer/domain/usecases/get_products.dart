@@ -7,4 +7,7 @@ class GetProducts {
   final ProductRepository repository;
 
   List<Product> call() => repository.getProducts();
+
+  Future<List<ProductCategoryOption>> getCategories() =>
+      repository.getCategories();
 }

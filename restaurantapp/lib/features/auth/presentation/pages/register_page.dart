@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/auth_user.dart';
 import '../../domain/exceptions/auth_exception.dart';
 import '../../domain/usecases/register_user.dart';
+import '../widgets/auth_page_widgets.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key, required this.registerUser});
@@ -74,137 +74,160 @@ class _RegisterPageState extends State<RegisterPage> {
     Navigator.of(context).pop();
   }
 
+  int _passwordStrength(String value) {
+    var score = 0;
+    if (value.length >= 8) score++;
+    if (RegExp(r'[A-Z]').hasMatch(value) && RegExp(r'[a-z]').hasMatch(value)) {
+      score++;
+    }
+    if (RegExp(r'\d').hasMatch(value)) score++;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(value)) score++;
+    return score;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Crear cuenta'),
-        backgroundColor: Colors.transparent,
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: Form(
-                key: _formKey,
-                child: Column(
+    return AuthPageFrame(
+      badgeTop: 'PRIMER PEDIDO',
+      badgeBottom: '-20%',
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AuthBrandHeader(),
+            const SizedBox(height: 38),
+            AuthPageHeading(
+              title: const TextSpan(
+                children: [
+                  TextSpan(text: 'Únete y\n'),
+                  TextSpan(
+                    text: 'come',
+                    style: TextStyle(backgroundColor: AuthColors.lime),
+                  ),
+                  TextSpan(text: ' primero.'),
+                ],
+              ),
+              subtitle: 'Tu cuenta lista en menos de un minuto.',
+            ),
+            const SizedBox(height: 20),
+            AuthTextField(
+              label: 'NOMBRE COMPLETO',
+              controller: _fullNameController,
+              hintText: 'Tu nombre',
+              enabled: !_isLoading,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.name],
+              validator: (value) => value == null || value.trim().length < 2
+                  ? 'Escribe tu nombre completo'
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            AuthTextField(
+              label: 'CORREO',
+              controller: _emailController,
+              hintText: 'tu@correo.com',
+              enabled: !_isLoading,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              autocorrect: false,
+              validator: (value) => value == null || !value.contains('@')
+                  ? 'Escribe un correo válido'
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            AuthTextField(
+              label: 'CONTRASEÑA',
+              controller: _passwordController,
+              hintText: 'Mínimo 8 caracteres',
+              enabled: !_isLoading,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.newPassword],
+              obscureText: _obscurePassword,
+              onToggleObscure: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              validator: (value) => value == null || value.length < 8
+                  ? 'Usa al menos 8 caracteres'
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _passwordController,
+              builder: (context, value, child) {
+                final score = _passwordStrength(value.text);
+                const colors = [
+                  Color(0xFFFF5A4D),
+                  AuthColors.orange,
+                  Color(0xFFFFD23A),
+                  AuthColors.lime,
+                ];
+                const labels = ['Muy débil', 'Débil', 'Aceptable', '¡Fuerte!'];
+
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _RegisterHeader(),
-                    const SizedBox(height: 30),
-                    TextFormField(
-                      controller: _fullNameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        hintText: 'Nombre completo',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                      validator: (value) =>
-                          value == null || value.trim().length < 2
-                          ? 'Escribe tu nombre completo'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        hintText: 'Correo electrónico',
-                        prefixIcon: Icon(Icons.alternate_email),
-                      ),
-                      validator: (value) =>
-                          value == null || !value.contains('@')
-                          ? 'Escribe un correo válido'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        hintText: 'Contraseña',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          tooltip: _obscurePassword
-                              ? 'Mostrar contraseña'
-                              : 'Ocultar contraseña',
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+                    Semantics(
+                      label: 'Seguridad de la contraseña',
+                      value: score == 0 ? 'Sin evaluar' : labels[score - 1],
+                      child: Row(
+                        children: List.generate(
+                          4,
+                          (index) => Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: index == 3 ? 0 : 6,
+                              ),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: index < score
+                                      ? colors[score - 1]
+                                      : Colors.white,
+                                  border: Border.all(
+                                    color: AuthColors.ink,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                      validator: (value) => value == null || value.length < 6
-                          ? 'Usa al menos 6 caracteres'
-                          : null,
                     ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _isLoading ? null : _submit,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: AppTheme.background,
+                    const SizedBox(height: 4),
+                    Text(
+                      value.text.isEmpty
+                          ? 'Mayúsculas, números y símbolos suman.'
+                          : labels[score == 0 ? 0 : score - 1],
+                      style: const TextStyle(
+                        color: AuthColors.muted,
+                        fontSize: 12,
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.background,
-                              ),
-                            )
-                          : const Text(
-                              'CREAR CUENTA',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 18),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Ya tengo una cuenta'),
                     ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
-          ),
+            const SizedBox(height: 14),
+            AuthPrimaryButton(
+              label: 'CREAR CUENTA',
+              onPressed: _isLoading ? null : _submit,
+              isLoading: _isLoading,
+            ),
+            const SizedBox(height: 70),
+            AuthSwitchLink(
+              question: '¿Ya tienes cuenta?',
+              label: 'Entrar',
+              onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+            ),
+          ],
         ),
       ),
-    );
-  }
-}
-
-class _RegisterHeader extends StatelessWidget {
-  const _RegisterHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Icon(Icons.person_add_alt_1, color: AppTheme.accent, size: 48),
-        const SizedBox(height: 12),
-        Text(
-          'Crear una cuenta',
-          style: Theme.of(context).textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Completa tus datos para comenzar.',
-          style: TextStyle(color: AppTheme.mutedText),
-        ),
-      ],
     );
   }
 }

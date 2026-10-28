@@ -5,9 +5,11 @@ import '../entities/product.dart';
 abstract interface class ProductRepository {
   List<Product> getProducts();
 
+  Future<List<ProductCategoryOption>> getCategories();
+
   Future<void> load();
 
-  void saveProduct(Product product);
+  Future<void> saveProduct(Product product, {ProductCategoryOption? category});
 
   Future<void> updateProductAvailability(String productId, bool isAvailable);
 
