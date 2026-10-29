@@ -11,15 +11,20 @@ class ProductDetailPage extends StatefulWidget {
   });
 
   final Product product;
-  final VoidCallback onAddToCart;
+  final Function(String) onAddToCart;
 
   @override
   State<ProductDetailPage> createState() => _ProductDetailPageState();
 }
 
 class _ProductDetailPageState extends State<ProductDetailPage> {
-  bool _withoutOnion = false;
-  bool _extraCheese = false;
+  final TextEditingController _notesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               color: const Color(0xFFFFE5BF),
               borderRadius: BorderRadius.circular(22),
             ),
-            child: Icon(product.icon, size: 96, color: product.accentColor),
+            child: product.imagePath != null && product.imagePath!.startsWith('http')
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: Image.network(
+                      product.imagePath!,
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          Icon(product.icon, size: 96, color: product.accentColor),
+                    ),
+                  )
+                : Icon(product.icon, size: 96, color: product.accentColor),
           ),
           const SizedBox(height: 20),
           Text(
@@ -71,7 +88,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 ? product.allergens!.join(', ')
                 : 'No especificados',
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
           const Text(
             'Personaliza tu pedido',
             style: TextStyle(
@@ -80,24 +97,29 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Sin cebolla'),
-            value: _withoutOnion,
-            activeColor: AppTheme.accent,
-            onChanged: (value) => setState(() => _withoutOnion = value ?? false),
-          ),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Extra queso'),
-            value: _extraCheese,
-            activeColor: AppTheme.accent,
-            onChanged: (value) => setState(() => _extraCheese = value ?? false),
-          ),
           const SizedBox(height: 12),
+          TextFormField(
+            controller: _notesController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: 'Ej: Sin cebolla, extra queso, término medio...',
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFEBDCCE)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFEBDCCE)),
+              ),
+              prefixIcon: const Icon(Icons.edit_note, color: AppTheme.accent),
+            ),
+          ),
+          const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: () {
-              widget.onAddToCart();
+              widget.onAddToCart(_notesController.text.trim());
               Navigator.pop(context);
             },
             icon: const Icon(Icons.add_shopping_cart),

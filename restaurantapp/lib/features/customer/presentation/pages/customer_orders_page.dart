@@ -169,11 +169,35 @@ class _OrderCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    order.summary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF937A6B), fontSize: 13),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: order.items.map((item) {
+                      final notes = item.notes?.trim();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${item.quantity}× ${item.name}',
+                              style: const TextStyle(
+                                color: Color(0xFF937A6B),
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (notes != null && notes.isNotEmpty)
+                              Text(
+                                'Personalización: $notes',
+                                style: const TextStyle(
+                                  color: Color(0xFF563524),
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 8),
                   Text(

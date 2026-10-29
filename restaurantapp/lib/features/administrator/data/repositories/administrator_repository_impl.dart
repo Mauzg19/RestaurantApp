@@ -33,11 +33,14 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
     final orders = savedOrders.isNotEmpty
         ? savedOrders.map(_toDashboardOrder).toList()
         : orderRepository == null
-        ? const [
+        ? [
             DashboardOrder(
               id: '#1048',
               customer: 'Ana García',
-              items: '2 Bowls + 1 bebida',
+              items: [
+                DashboardOrderItem(name: 'Bowl Especial', quantity: 2),
+                DashboardOrderItem(name: 'Bebida', quantity: 1),
+              ],
               time: '12:15',
               total: 26.50,
               status: OrderStatus.preparing,
@@ -45,7 +48,9 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
             DashboardOrder(
               id: '#1049',
               customer: 'Luis Pérez',
-              items: '3 Burritos',
+              items: [
+                DashboardOrderItem(name: 'Burrito', quantity: 3),
+              ],
               time: '12:42',
               total: 31.75,
               status: OrderStatus.pending,
@@ -53,7 +58,10 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
             DashboardOrder(
               id: '#1050',
               customer: 'Sara Díaz',
-              items: '1 taco box + sides',
+              items: [
+                DashboardOrderItem(name: 'Taco Box', quantity: 1),
+                DashboardOrderItem(name: 'Sides', quantity: 1),
+              ],
               time: '13:05',
               total: 22.00,
               status: OrderStatus.ready,
@@ -100,7 +108,11 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
   DashboardOrder _toDashboardOrder(CustomerOrder order) => DashboardOrder(
     id: '#${order.id}',
     customer: order.customerName,
-    items: order.summary,
+    items: order.items.map((item) => DashboardOrderItem(
+      name: item.name,
+      quantity: item.quantity,
+      notes: item.notes,
+    )).toList(),
     time:
         '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}',
     total: order.total,

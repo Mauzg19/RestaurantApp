@@ -353,7 +353,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<ProductCategoryOption>(
-                    initialValue: selectedCategory,
+                    value: selectedCategory,
                     decoration: const InputDecoration(
                       labelText: 'Categoría',
                       hintText: 'Selecciona una categoría',
@@ -702,7 +702,6 @@ class _DashboardTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Brand & Top Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           decoration: const BoxDecoration(
@@ -763,8 +762,6 @@ class _DashboardTab extends StatelessWidget {
             ],
           ),
         ),
-
-        // Scrollable content
         Expanded(
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -772,7 +769,6 @@ class _DashboardTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Welcome
                 Text(
                   'Bienvenido, ${user.fullName}',
                   style: AppTheme.serif(
@@ -787,8 +783,6 @@ class _DashboardTab extends StatelessWidget {
                   style: AppTheme.mono(fontSize: 12, color: AppTheme.graphite),
                 ),
                 const SizedBox(height: 14),
-
-                // Compact Monad Metrics Grid (2x2)
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -803,8 +797,6 @@ class _DashboardTab extends StatelessWidget {
                       _MetricCard(metric: metrics[index]),
                 ),
                 const SizedBox(height: 20),
-
-                // Recent Orders Section
                 _SectionHeader(
                   title: 'Pedidos recientes',
                   action: 'Ver todo',
@@ -825,8 +817,6 @@ class _DashboardTab extends StatelessWidget {
                         ),
                       ),
                 const SizedBox(height: 20),
-
-                // Quick Inventory Section
                 _SectionHeader(
                   title: 'Inventario rápido',
                   action: 'Gestionar',
@@ -1391,12 +1381,11 @@ class _OrderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Order ID, Customer name, and Status Tag
           Row(
             children: [
               Text(
                 order.id,
-                style: AppTheme.mono(
+                style: AppTheme.serif(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.lakeBlue,
@@ -1438,17 +1427,17 @@ class _OrderCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-
-          // Items summary
           Text(
-            order.items,
-            style: AppTheme.mono(fontSize: 11, color: AppTheme.graphite),
-            maxLines: 1,
+            order.items.map((item) {
+              final notes = item.notes?.trim();
+              return '${item.quantity}x ${item.name}'
+                  '${notes == null || notes.isEmpty ? '' : ' ($notes)'}';
+            }).join('\n'),
+            style: AppTheme.serif(fontSize: 11, color: AppTheme.graphite),
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 8),
-
-          // Footer: Time, Total COP and Action Button
           Row(
             children: [
               Expanded(
@@ -1462,7 +1451,10 @@ class _OrderCard extends StatelessWidget {
                     const SizedBox(width: 3),
                     Text(
                       order.time,
-                      style: AppTheme.mono(fontSize: 11, color: AppTheme.smoke),
+                      style: AppTheme.serif(
+                        fontSize: 11,
+                        color: AppTheme.smoke,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     const Icon(
@@ -1475,7 +1467,7 @@ class _OrderCard extends StatelessWidget {
                       child: Text(
                         formatCop(order.total),
                         overflow: TextOverflow.ellipsis,
-                        style: AppTheme.mono(
+                        style: AppTheme.serif(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: AppTheme.offBlack,
@@ -1587,7 +1579,7 @@ class _InventoryItem extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${item.category} • ${formatCop(item.price)}',
-                  style: AppTheme.mono(fontSize: 11, color: AppTheme.graphite),
+                  style: AppTheme.serif(fontSize: 11, color: AppTheme.graphite),
                 ),
               ],
             ),
@@ -1601,8 +1593,7 @@ class _InventoryItem extends StatelessWidget {
                 children: [
                   Text(
                     'Stock: ${item.stock}',
-                    style: TextStyle(
-                      fontFamily: AppTheme.monoFont,
+                    style: AppTheme.serif(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: stockColor,

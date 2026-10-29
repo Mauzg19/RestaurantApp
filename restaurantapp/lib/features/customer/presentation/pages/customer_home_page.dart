@@ -44,7 +44,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   final TextEditingController _searchController = TextEditingController();
   String? _selectedCategory;
   List<ProductCategoryOption> _categories = const [];
-  final Map<String, int> _cart = {};
+  final Map<_CartKey, _CartItem> _cart = {};
   String _searchQuery = '';
 
   @override
@@ -93,8 +93,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   List<_CartLine> get _cartLines {
     return _cart.entries
         .map((entry) {
+          final cartItem = entry.value;
           final product = _products.firstWhere(
-            (item) => item.id == entry.key,
+            (item) => item.id == entry.key.productId,
             orElse: () => const Product(
               id: '',
               name: 'Producto',
@@ -104,30 +105,50 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               accentColor: Color(0xFFC95D32),
             ),
           );
-          return _CartLine(product: product, quantity: entry.value);
+          return _CartLine(
+            key: entry.key,
+            product: product,
+            quantity: cartItem.quantity,
+            notes: cartItem.notes,
+          );
         })
         .where((line) => line.product.id.isNotEmpty)
         .toList();
   }
 
   int get cartCount =>
-      _cart.values.fold<int>(0, (sum, quantity) => sum + quantity);
+      _cart.values.fold<int>(0, (sum, item) => sum + item.quantity);
 
   double get cartTotal => _cartLines.fold(
     0.0,
     (sum, line) => sum + (line.product.price * line.quantity),
   );
 
-  void _toggleCart(Product product) {
+  void _toggleCart(Product product, [String? notes]) {
     if (!product.isAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Este producto está agotado.')),
       );
       return;
     }
+    final trimmedNotes = notes?.trim();
+    final key = _CartKey(
+      product.id,
+      trimmedNotes == null || trimmedNotes.isEmpty ? null : trimmedNotes,
+    );
     setState(() {
-      final current = _cart[product.id] ?? 0;
-      _cart[product.id] = current + 1;
+      final existing = _cart[key];
+      if (existing != null) {
+        _cart[key] = _CartItem(
+          quantity: existing.quantity + 1,
+          notes: existing.notes,
+        );
+      } else {
+        _cart[key] = _CartItem(
+          quantity: 1,
+          notes: key.notes,
+        );
+      }
     });
   }
 
@@ -136,21 +157,25 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       MaterialPageRoute(
         builder: (_) => ProductDetailPage(
           product: product,
-          onAddToCart: () => _toggleCart(product),
+          onAddToCart: (notes) => _toggleCart(product, notes),
         ),
       ),
     );
   }
 
-  void _removeFromCart(String productId, [BuildContext? context]) {
+  void _removeFromCart(_CartKey key, [BuildContext? context]) {
     final wasEmptyBefore = _cart.isEmpty;
     setState(() {
-      if (!_cart.containsKey(productId)) return;
-      final next = (_cart[productId] ?? 1) - 1;
+      if (!_cart.containsKey(key)) return;
+      final item = _cart[key]!;
+      final next = item.quantity - 1;
       if (next <= 0) {
-        _cart.remove(productId);
+        _cart.remove(key);
       } else {
-        _cart[productId] = next;
+        _cart[key] = _CartItem(
+          quantity: next,
+          notes: item.notes,
+        );
       }
     });
 
@@ -187,7 +212,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     if (unavailable.isNotEmpty) {
       setState(() {
         for (final line in unavailable) {
-          _cart.remove(line.product.id);
+          _cart.remove(line.key);
         }
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -262,6 +287,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               name: line.product.name,
               quantity: line.quantity,
               unitPrice: line.product.price,
+              notes: line.notes,
             ),
           )
           .toList(),
@@ -374,7 +400,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                                 children: [
                                   IconButton(
                                     onPressed: () => _removeFromCart(
-                                      line.product.id,
+                                      line.key,
                                       context,
                                     ),
                                     icon: const Icon(
@@ -384,12 +410,26 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                                     tooltip: 'Quitar producto',
                                   ),
                                   Expanded(
-                                    child: Text(
-                                      '${line.quantity}× ${line.product.name}',
-                                      style: const TextStyle(
-                                        color: Color(0xFF3B2115),
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${line.quantity}× ${line.product.name}',
+                                          style: const TextStyle(
+                                            color: Color(0xFF3B2115),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (line.notes != null && line.notes!.isNotEmpty)
+                                          Text(
+                                            line.notes!,
+                                            style: const TextStyle(
+                                              color: Color(0xFF937A6B),
+                                              fontSize: 12,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                   Text(
@@ -645,12 +685,43 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 }
 
-class _CartLine {
-  const _CartLine({required this.product, required this.quantity});
+class _CartKey {
+  const _CartKey(this.productId, this.notes);
 
+  final String productId;
+  final String? notes;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CartKey &&
+      productId == other.productId &&
+      notes == other.notes;
+
+  @override
+  int get hashCode => Object.hash(productId, notes);
+}
+
+class _CartItem {
+  const _CartItem({required this.quantity, this.notes});
+
+  final int quantity;
+  final String? notes;
+}
+
+class _CartLine {
+  const _CartLine({
+    required this.key,
+    required this.product,
+    required this.quantity,
+    this.notes,
+  });
+
+  final _CartKey key;
   final Product product;
   final int quantity;
+  final String? notes;
 }
+
 
 class _HomeContent extends StatelessWidget {
   const _HomeContent({

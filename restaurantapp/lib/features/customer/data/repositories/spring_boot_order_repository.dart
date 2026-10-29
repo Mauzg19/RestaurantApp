@@ -58,7 +58,11 @@ class SpringBootOrderRepository implements OrderRepository {
       }
       await httpClient.put(
         ApiConfig.addCartItemUrl,
-        body: {'menuItemId': menuItemId, 'quantity': item.quantity},
+        body: {
+          'menuItemId': menuItemId,
+          'quantity': item.quantity,
+          'notes': item.notes,
+        },
       );
     }
 
@@ -126,6 +130,7 @@ class SpringBootOrderRepository implements OrderRepository {
                 food['price'],
                 fallback: quantity > 0 ? totalPrice / quantity : 0,
               ),
+              notes: item['notes']?.toString(),
             );
           }).toList()
         : <CustomerOrderItem>[];

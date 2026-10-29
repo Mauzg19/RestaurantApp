@@ -74,12 +74,14 @@ class CustomerOrderItem {
     required this.name,
     required this.quantity,
     required this.unitPrice,
+    this.notes,
   });
 
   final String productId;
   final String name;
   final int quantity;
   final double unitPrice;
+  final String? notes;
 
   double get subtotal => unitPrice * quantity;
 
@@ -88,6 +90,7 @@ class CustomerOrderItem {
     'name': name,
     'quantity': quantity,
     'unit_price': unitPrice,
+    'notes': notes,
   };
 
   factory CustomerOrderItem.fromJson(Map<String, dynamic> json) =>
@@ -96,6 +99,7 @@ class CustomerOrderItem {
         name: json['name']?.toString() ?? 'Producto',
         quantity: _toInt(json['quantity']),
         unitPrice: _toDouble(json['unit_price']),
+        notes: json['notes'] as String?,
       );
 }
 
@@ -127,8 +131,13 @@ class CustomerOrder {
 
   double get total => items.fold(0.0, (sum, item) => sum + item.subtotal);
 
-  String get summary =>
-      items.map((item) => '${item.quantity}× ${item.name}').join(', ');
+  String get summary => items
+      .map((item) {
+        final notes = item.notes?.trim();
+        return '${item.quantity}× ${item.name}'
+            '${notes == null || notes.isEmpty ? '' : ' ($notes)'}';
+      })
+      .join(', ');
 
   CustomerOrder copyWith({String? status}) => CustomerOrder(
     id: id,

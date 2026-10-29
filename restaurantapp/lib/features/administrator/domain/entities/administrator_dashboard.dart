@@ -57,7 +57,7 @@ class DashboardOrder {
 
   final String id;
   final String customer;
-  final String items;
+  final List<DashboardOrderItem> items;
   final String time;
   final double total;
   final OrderStatus status;
@@ -70,6 +70,18 @@ class DashboardOrder {
     total: total,
     status: status ?? this.status,
   );
+}
+
+class DashboardOrderItem {
+  const DashboardOrderItem({
+    required this.name,
+    required this.quantity,
+    this.notes,
+  });
+
+  final String name;
+  final int quantity;
+  final String? notes;
 }
 
 class DashboardMenuItem {

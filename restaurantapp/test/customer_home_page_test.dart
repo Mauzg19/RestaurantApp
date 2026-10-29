@@ -237,6 +237,81 @@ void main() {
     },
   );
 
+  testWidgets(
+    'el cliente conserva la personalización del producto hasta crear el pedido',
+    (tester) async {
+      final productRepository = ProductRepositoryImpl();
+      final orderRepository = OrderRepositoryImpl();
+      final settingsRepository = UserSettingsRepositoryImpl();
+      await settingsRepository.saveDeliveryAddress(
+        'ana@example.com',
+        const Address(street: 'Calle 1', city: 'Madrid', postalCode: '28001'),
+      );
+      await settingsRepository.savePaymentMethod(
+        'ana@example.com',
+        const PaymentMethod(type: 'Efectivo', details: 'Pago al recibir'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: CustomerHomePage(
+            user: const AuthUser(
+              fullName: 'Ana López',
+              email: 'ana@example.com',
+              role: AuthRole.customer,
+            ),
+            getProducts: GetProducts(productRepository),
+            orderRepository: orderRepository,
+            settingsRepository: settingsRepository,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.grid_view_outlined).last);
+      await tester.pumpAndSettle();
+      final productName = find.text('Burrito de pollo');
+      await tester.ensureVisible(productName);
+      await tester.tap(productName);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detalle del producto'), findsOneWidget);
+      await tester.ensureVisible(find.text('Personaliza tu pedido'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextFormField),
+        'Sin sal',
+      );
+      await tester.tap(find.textContaining('Añadir por'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.shopping_cart_outlined).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sin sal'), findsOneWidget);
+      await tester.tap(find.text('Confirmar pedido'));
+      await tester.pumpAndSettle();
+
+      expect(orderRepository.getOrders(), hasLength(1));
+      expect(orderRepository.getOrders().single.items.single.notes, 'Sin sal');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: CustomerOrdersPage(
+            user: const AuthUser(
+              fullName: 'Ana López',
+              email: 'ana@example.com',
+              role: AuthRole.customer,
+            ),
+            orderRepository: orderRepository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Personalización: Sin sal'), findsOneWidget);
+    },
+  );
+
   testWidgets('el cliente ve sus pedidos realizados', (tester) async {
     final orderRepository = OrderRepositoryImpl();
     await orderRepository.saveOrder(
@@ -249,6 +324,7 @@ void main() {
             name: 'Bowl BBQ',
             quantity: 1,
             unitPrice: 8.25,
+            notes: 'Sin cebolla',
           ),
         ],
         deliveryAddress: const Address(
@@ -280,6 +356,7 @@ void main() {
 
     expect(find.text('Pedidos Activos'), findsOneWidget);
     expect(find.textContaining('Bowl BBQ'), findsOneWidget);
+    expect(find.text('Personalización: Sin cebolla'), findsOneWidget);
   });
 
   testWidgets('permite quitar un producto antes de confirmar el pedido', (

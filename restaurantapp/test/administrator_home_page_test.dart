@@ -158,6 +158,7 @@ void main() {
               name: 'Bowl BBQ',
               quantity: 1,
               unitPrice: 8.25,
+              notes: 'Sin cebolla',
             ),
           ],
           deliveryAddress: const Address(
@@ -196,6 +197,7 @@ void main() {
 
       expect(find.textContaining('Ana López'), findsOneWidget);
       expect(find.textContaining('Bowl BBQ'), findsAtLeastNWidgets(1));
+      expect(find.textContaining('Sin cebolla'), findsOneWidget);
 
       await orderRepository.updateOrderStatus(
         orderRepository.getOrders().single.id,
