@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:restaurantapp/core/services/cart_service.dart';
 import 'package:restaurantapp/core/theme/app_theme.dart';
 import 'package:restaurantapp/features/auth/domain/entities/auth_user.dart';
 import 'package:restaurantapp/features/customer/data/repositories/order_repository_impl.dart';
@@ -13,6 +15,11 @@ import 'package:restaurantapp/features/customer/presentation/pages/customer_orde
 import 'package:restaurantapp/features/customer/domain/entities/product.dart';
 
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await CartService().clearCart();
+  });
+
   test(
     'el repositorio local conserva la disponibilidad del producto',
     () async {
@@ -227,9 +234,12 @@ void main() {
       await tester.tap(find.byIcon(Icons.shopping_cart_outlined).first);
       await tester.pumpAndSettle();
 
-      expect(find.text('Confirmar pedido'), findsOneWidget);
       expect(find.text('Total'), findsOneWidget);
+      expect(find.text('Continuar al pago'), findsOneWidget);
 
+      await tester.tap(find.text('Continuar al pago'));
+      await tester.pumpAndSettle();
+      expect(find.text('Confirmar pedido'), findsOneWidget);
       await tester.tap(find.text('Confirmar pedido'));
       await tester.pumpAndSettle();
 
@@ -278,16 +288,15 @@ void main() {
       expect(find.text('Detalle del producto'), findsOneWidget);
       await tester.ensureVisible(find.text('Personaliza tu pedido'));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byType(TextFormField),
-        'Sin sal',
-      );
+      await tester.enterText(find.byType(TextFormField), 'Sin sal');
       await tester.tap(find.textContaining('Añadir por'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.shopping_cart_outlined).first);
       await tester.pumpAndSettle();
 
       expect(find.text('Sin sal'), findsOneWidget);
+      await tester.tap(find.text('Continuar al pago'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Confirmar pedido'));
       await tester.pumpAndSettle();
 
@@ -357,6 +366,51 @@ void main() {
     expect(find.text('Pedidos Activos'), findsOneWidget);
     expect(find.textContaining('Bowl BBQ'), findsOneWidget);
     expect(find.text('Personalización: Sin cebolla'), findsOneWidget);
+  });
+
+  testWidgets('muestra como confirmado un pedido con pago aprobado', (
+    tester,
+  ) async {
+    final orderRepository = OrderRepositoryImpl();
+    await orderRepository.saveOrder(
+      CustomerOrder(
+        customerName: 'Ana López',
+        customerEmail: 'ana@example.com',
+        items: const [
+          CustomerOrderItem(
+            productId: 'bowl-bbq',
+            name: 'Bowl BBQ',
+            quantity: 1,
+            unitPrice: 8.25,
+          ),
+        ],
+        deliveryAddress: const Address(
+          street: 'Calle 1',
+          city: 'Madrid',
+          postalCode: '28001',
+        ),
+        paymentMethod: const PaymentMethod(type: 'Stripe', details: ''),
+        paymentStatus: 'paid',
+        status: 'pending',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: CustomerOrdersPage(
+          user: const AuthUser(
+            fullName: 'Ana López',
+            email: 'ana@example.com',
+            role: AuthRole.customer,
+          ),
+          orderRepository: orderRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('CONFIRMADO'), findsOneWidget);
   });
 
   testWidgets('permite quitar un producto antes de confirmar el pedido', (

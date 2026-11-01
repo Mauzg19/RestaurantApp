@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/network/http_client_service.dart';
+import '../../../../core/services/cart_service.dart';
 import '../../../../core/services/biometric_auth_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
@@ -39,18 +41,135 @@ class CustomerHomePage extends StatefulWidget {
   State<CustomerHomePage> createState() => _CustomerHomePageState();
 }
 
-class _CustomerHomePageState extends State<CustomerHomePage> {
+class _CustomerHomePageState extends State<CustomerHomePage>
+    with WidgetsBindingObserver {
   int _selectedTab = 0;
   final TextEditingController _searchController = TextEditingController();
+  Timer? _paymentStatusTimer;
   String? _selectedCategory;
   List<ProductCategoryOption> _categories = const [];
-  final Map<_CartKey, _CartItem> _cart = {};
   String _searchQuery = '';
+  int _checkoutStep = 0; // 0: Cart, 1: Confirmation
+  bool _isRefreshingPayment = false;
+  bool _paymentSyncErrorVisible = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_loadCategories());
+    unawaited(_restoreCartAndPayments());
+    _paymentStatusTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => unawaited(_refreshPendingPayment()),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshPendingPayment());
+    }
+  }
+
+  Future<void> _restoreCartAndPayments() async {
+    try {
+      await CartService().loadCart();
+      if (!mounted) return;
+      setState(() {});
+      if (widget.orderRepository?.requiresCheckout ?? false) {
+        await widget.orderRepository!.load();
+      }
+      await _refreshPendingPayment();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudieron restaurar el carrito y los pagos: $error',
+          ),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
+    }
+  }
+
+  Future<void> _refreshPendingPayment() async {
+    final repository = widget.orderRepository;
+    if (repository == null ||
+        !repository.requiresCheckout ||
+        _isRefreshingPayment) {
+      return;
+    }
+    _isRefreshingPayment = true;
+    try {
+      final requestId = await CartService().getCheckoutRequestId();
+      if (requestId == null) return;
+
+      final orders = repository.getOrdersByEmail(widget.user.email);
+      CustomerOrder? trackedOrder;
+      for (final order in orders) {
+        if (order.clientRequestId == requestId) {
+          trackedOrder = order;
+          break;
+        }
+      }
+      if (trackedOrder == null) return;
+
+      var currentOrder = trackedOrder;
+      if (currentOrder.paymentStatus.toLowerCase() == 'pending') {
+        currentOrder =
+            await repository.refreshPaymentStatus(currentOrder.id) ??
+            currentOrder;
+      }
+
+      final paymentStatus = currentOrder.paymentStatus.toLowerCase();
+      if (paymentStatus == 'paid') {
+        await CartService().removePurchasedItems(
+          currentOrder.items.map(
+            (item) => CartItem(
+              productId: item.productId,
+              quantity: item.quantity,
+              notes: item.notes,
+            ),
+          ),
+        );
+        await CartService().clearCheckoutRequestId(
+          expectedRequestId: requestId,
+        );
+      } else if (paymentStatus == 'failed' || paymentStatus == 'cancelled') {
+        await CartService().clearCheckoutRequestId(
+          expectedRequestId: requestId,
+        );
+      }
+      _paymentSyncErrorVisible = false;
+      if (mounted) setState(() {});
+    } on NetworkUnavailableException {
+      if (mounted && !_paymentSyncErrorVisible) {
+        _paymentSyncErrorVisible = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFFFFF0C2),
+            content: Text(
+              'Aún no pudimos verificar el pago. No vuelvas a pagar; seguiremos consultando el estado.',
+              style: TextStyle(color: Color(0xFF563524)),
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted && !_paymentSyncErrorVisible) {
+        _paymentSyncErrorVisible = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo verificar el pago pendiente: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+    } finally {
+      _isRefreshingPayment = false;
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -91,11 +210,12 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 
   List<_CartLine> get _cartLines {
-    return _cart.entries
+    final cartItems = CartService().items;
+    return cartItems.entries
         .map((entry) {
           final cartItem = entry.value;
           final product = _products.firstWhere(
-            (item) => item.id == entry.key.productId,
+            (item) => item.id == cartItem.productId,
             orElse: () => const Product(
               id: '',
               name: 'Producto',
@@ -116,8 +236,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         .toList();
   }
 
-  int get cartCount =>
-      _cart.values.fold<int>(0, (sum, item) => sum + item.quantity);
+  int get cartCount => CartService().totalCount;
 
   double get cartTotal => _cartLines.fold(
     0.0,
@@ -131,25 +250,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       );
       return;
     }
-    final trimmedNotes = notes?.trim();
-    final key = _CartKey(
-      product.id,
-      trimmedNotes == null || trimmedNotes.isEmpty ? null : trimmedNotes,
-    );
-    setState(() {
-      final existing = _cart[key];
-      if (existing != null) {
-        _cart[key] = _CartItem(
-          quantity: existing.quantity + 1,
-          notes: existing.notes,
-        );
-      } else {
-        _cart[key] = _CartItem(
-          quantity: 1,
-          notes: key.notes,
-        );
-      }
-    });
+    CartService().addToCart(product, notes: notes);
+    setState(() {});
   }
 
   void _openProductDetail(Product product) {
@@ -157,41 +259,34 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       MaterialPageRoute(
         builder: (_) => ProductDetailPage(
           product: product,
-          onAddToCart: (notes) => _toggleCart(product, notes),
+          onAddToCart: (notes) {
+            _toggleCart(product, notes);
+            setState(() {});
+          },
         ),
       ),
     );
   }
 
-  void _removeFromCart(_CartKey key, [BuildContext? context]) {
-    final wasEmptyBefore = _cart.isEmpty;
-    setState(() {
-      if (!_cart.containsKey(key)) return;
-      final item = _cart[key]!;
-      final next = item.quantity - 1;
-      if (next <= 0) {
-        _cart.remove(key);
-      } else {
-        _cart[key] = _CartItem(
-          quantity: next,
-          notes: item.notes,
-        );
-      }
-    });
+  void _removeFromCart(String key, [BuildContext? context]) {
+    final wasEmptyBefore = CartService().items.isEmpty;
+    CartService().removeFromCart(key);
+    setState(() {});
 
-    if ((context != null) && (_cart.isEmpty || wasEmptyBefore)) {
+    if ((context != null) && (CartService().items.isEmpty || wasEmptyBefore)) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Tu carrito está vacío.')));
-      if (_cart.isEmpty) {
+      if (CartService().items.isEmpty) {
         Navigator.of(context).pop();
       }
     }
   }
 
   Future<void> _confirmOrder(BuildContext context) async {
-    if (_cart.isEmpty || widget.orderRepository == null) {
-      if (_cart.isEmpty) {
+    final items = CartService().items;
+    if (items.isEmpty || widget.orderRepository == null) {
+      if (items.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Tu carrito está vacío.')));
@@ -212,7 +307,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     if (unavailable.isNotEmpty) {
       setState(() {
         for (final line in unavailable) {
-          _cart.remove(line.key);
+          CartService().removeFromCart(line.key);
         }
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -226,7 +321,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final address = await widget.settingsRepository!.getDeliveryAddress(
       widget.user.email,
     );
-    if (!context.mounted) return;
+    if (!mounted || !context.mounted) return;
     PaymentMethod? savedPayment;
     if (widget.paymentService == null &&
         !(widget.orderRepository?.requiresCheckout ?? false)) {
@@ -252,20 +347,26 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       return;
     }
 
+    final usesBackendCheckout = widget.orderRepository!.requiresCheckout;
+    final clientRequestId = usesBackendCheckout
+        ? await CartService().getOrCreateCheckoutRequestId()
+        : null;
     PaymentResult? paymentResult;
     try {
-      paymentResult = await widget.paymentService?.pay(
-        amountInCents: (cartTotal * 100).round(),
-        currency: 'cop',
-        items: _cartLines
-            .map(
-              (line) => {
-                'product_id': line.product.id,
-                'quantity': line.quantity,
-              },
-            )
-            .toList(),
-      );
+      if (!usesBackendCheckout) {
+        paymentResult = await widget.paymentService?.pay(
+          amountInCents: (cartTotal * 100).round(),
+          currency: 'cop',
+          items: _cartLines
+              .map(
+                (line) => {
+                  'product_id': line.product.id,
+                  'quantity': line.quantity,
+                },
+              )
+              .toList(),
+        );
+      }
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -292,6 +393,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           )
           .toList(),
       deliveryAddress: address,
+      clientRequestId: clientRequestId,
       paymentMethod: paymentResult == null
           ? savedPayment ??
                 const PaymentMethod(
@@ -305,31 +407,40 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     try {
       final paymentUrl = await widget.orderRepository!.saveOrder(order);
-      // Forzamos la recarga de pedidos para que se vean reflejados inmediatamente
-      await widget.orderRepository!.load();
-      if (widget.orderRepository!.requiresCheckout) {
+      if (usesBackendCheckout) {
         final uri = Uri.tryParse(paymentUrl ?? '');
         if (uri == null ||
             !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
           throw StateError(
-            'El pedido se guardó en el backend, pero no se pudo abrir su enlace de pago.',
+            'El pedido quedó pendiente en el backend, pero no se pudo abrir Stripe Checkout.',
           );
         }
+        if (!context.mounted) return;
+        setState(() {});
+        Navigator.pop(context);
+        if (!mounted) return;
+        ScaffoldMessenger.of(this.context)
+            .showSnackBar(const SnackBar(content: Text('Procesado')));
+        return;
       }
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No se pudo guardar el pedido: $error'),
+          content: Text(
+            usesBackendCheckout
+                ? 'No se pudo iniciar Stripe Checkout: $error'
+                : 'No se pudo guardar el pedido: $error',
+          ),
           backgroundColor: const Color(0xFFB3261E),
         ),
       );
       return;
     }
 
+    await CartService().clearCart();
     if (!context.mounted) return;
-
-    setState(() => _cart.clear());
+    setState(() {});
     Navigator.pop(context);
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Pedido confirmado.')));
@@ -342,7 +453,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 
   void _openCartSheet(BuildContext context) {
-    if (_cart.isEmpty) {
+    if (CartService().items.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Tu carrito está vacío.')));
@@ -355,140 +466,227 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Tu pedido',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Color(0xFF3B2115),
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Tu pedido',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFF3B2115),
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$cartCount ${cartCount == 1 ? 'artículo' : 'artículos'}',
-                      style: const TextStyle(color: Color(0xFF563524)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: _cartLines
-                          .map(
-                            (line) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Row(
-                                children: [
-                                  IconButton(
-                                    onPressed: () => _removeFromCart(
-                                      line.key,
-                                      context,
-                                    ),
-                                    icon: const Icon(
-                                      Icons.remove_circle_outline,
-                                      color: AppTheme.accent,
-                                    ),
-                                    tooltip: 'Quitar producto',
-                                  ),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '${line.quantity}× ${line.product.name}',
-                                          style: const TextStyle(
-                                            color: Color(0xFF3B2115),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        if (line.notes != null && line.notes!.isNotEmpty)
-                                          Text(
-                                            line.notes!,
-                                            style: const TextStyle(
-                                              color: Color(0xFF937A6B),
-                                              fontSize: 12,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    formatCop(
-                                      line.product.price * line.quantity,
-                                    ),
-                                    style: const TextStyle(
-                                      color: AppTheme.accent,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                ),
-                const Divider(height: 24),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Total',
-                        style: TextStyle(
-                          color: Color(0xFF563524),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                      const SizedBox(width: 8),
+                      Text(
+                        '$cartCount ${cartCount == 1 ? 'artículo' : 'artículos'}',
+                        style: const TextStyle(color: Color(0xFF563524)),
+                      ),
+                      if (_checkoutStep > 0)
+                        IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: AppTheme.accent,
+                          ),
+                          onPressed: () {
+                            setState(() => _checkoutStep = 0);
+                            setModalState(() {});
+                          },
                         ),
-                      ),
-                    ),
-                    Text(
-                      formatCop(cartTotal),
-                      style: const TextStyle(
-                        color: Color(0xFF3B2115),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => _confirmOrder(context),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppTheme.accent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text('Confirmar pedido'),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _checkoutStep == 0
+                        ? _buildCartStep(context, setModalState)
+                        : _buildConfirmationStep(context, setModalState),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCartStep(BuildContext context, StateSetter setModalState) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              children: _cartLines
+                  .map(
+                    (line) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              _removeFromCart(line.key, context);
+                              setState(() {});
+                              setModalState(() {});
+                            },
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              color: AppTheme.accent,
+                            ),
+                            tooltip: 'Quitar producto',
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${line.quantity}× ${line.product.name}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF3B2115),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (line.notes != null &&
+                                    line.notes!.isNotEmpty)
+                                  Text(
+                                    line.notes!,
+                                    style: const TextStyle(
+                                      color: Color(0xFF937A6B),
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            formatCop(line.product.price * line.quantity),
+                            style: const TextStyle(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        ),
+        const Divider(height: 24),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Total',
+                style: TextStyle(
+                  color: Color(0xFF563524),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            Text(
+              formatCop(cartTotal),
+              style: const TextStyle(
+                color: Color(0xFF3B2115),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () {
+              setState(() => _checkoutStep = 1);
+              setModalState(() {});
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.accent,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text('Continuar al pago'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConfirmationStep(
+    BuildContext context,
+    StateSetter setModalState,
+  ) {
+    return FutureBuilder<List<Object?>>(
+      future: Future.wait<Object?>([
+        widget.settingsRepository?.getDeliveryAddress(widget.user.email) ??
+            Future.value(null),
+        widget.settingsRepository?.getPaymentMethod(widget.user.email) ??
+            Future.value(null),
+      ]),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final addressData = snapshot.data?[0] as Address?;
+        final addressString = addressData?.fullAddress;
+
+        final hasAddress = addressString != null;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Confirmación de Datos',
+              style: TextStyle(
+                color: Color(0xFF3B2115),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _ConfirmationTile(
+              icon: Icons.location_on,
+              label: 'Dirección de entrega',
+              value: addressString ?? 'No configurada',
+              isValid: hasAddress,
+              onTap: _goToDetails,
+            ),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: hasAddress ? () => _confirmOrder(context) : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: hasAddress ? AppTheme.accent : Colors.grey,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text(
+                  hasAddress ? 'Confirmar pedido' : 'Datos Incompletos',
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -594,6 +792,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _paymentStatusTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -685,29 +885,6 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 }
 
-class _CartKey {
-  const _CartKey(this.productId, this.notes);
-
-  final String productId;
-  final String? notes;
-
-  @override
-  bool operator ==(Object other) =>
-      other is _CartKey &&
-      productId == other.productId &&
-      notes == other.notes;
-
-  @override
-  int get hashCode => Object.hash(productId, notes);
-}
-
-class _CartItem {
-  const _CartItem({required this.quantity, this.notes});
-
-  final int quantity;
-  final String? notes;
-}
-
 class _CartLine {
   const _CartLine({
     required this.key,
@@ -716,12 +893,76 @@ class _CartLine {
     this.notes,
   });
 
-  final _CartKey key;
+  final String key;
   final Product product;
   final int quantity;
   final String? notes;
 }
 
+class _ConfirmationTile extends StatelessWidget {
+  const _ConfirmationTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isValid,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isValid;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isValid ? const Color(0xFFEBDCCE) : Colors.red.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: isValid ? AppTheme.accent : Colors.red, size: 24),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF937A6B),
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: Color(0xFF3B2115),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            isValid ? Icons.check_circle_outline : Icons.error_outline,
+            color: isValid ? Colors.green : Colors.red,
+            size: 20,
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 class _HomeContent extends StatelessWidget {
   const _HomeContent({
@@ -2008,7 +2249,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                 ),
                 value: _biometricEnabled,
                 onChanged: _toggleBiometric,
-                activeColor: const Color(0xFF2E7D32),
+                activeThumbColor: const Color(0xFF2E7D32),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),

@@ -10,5 +10,7 @@ abstract interface class OrderRepository {
 
   Future<String?> saveOrder(CustomerOrder order);
 
+  Future<CustomerOrder?> refreshPaymentStatus(String orderId) async => null;
+
   Future<void> updateOrderStatus(String orderId, String status);
 }

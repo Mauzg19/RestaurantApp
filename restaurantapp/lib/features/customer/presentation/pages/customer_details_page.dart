@@ -191,11 +191,11 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
               ),
               const SizedBox(height: 32),
               if (widget.collectPaymentMethod) ...[
-                const _SectionTitle(title: 'Método de Pago'),
-                const SizedBox(height: 16),
-                _buildTextField(_paymentTypeController, 'Tipo (Ej: Tarjeta, Efectivo)', Icons.payment, (v) => v == null || v.isEmpty ? 'Requerido' : null),
-                const SizedBox(height: 16),
-                _buildTextField(_paymentDetailsController, 'Detalles (Ej: **** 1234)', Icons.credit_card, (v) => v == null || v.isEmpty ? 'Requerido' : null),
+              const _SectionTitle(title: 'Método de Pago'),
+              const SizedBox(height: 16),
+              _buildTextField(_paymentTypeController, 'Tipo (Ej: Tarjeta, Efectivo)', Icons.payment, (v) => v == null || v.isEmpty ? 'Requerido' : null),
+              const SizedBox(height: 16),
+              _buildTextField(_paymentDetailsController, 'Detalles (Ej: **** 1234)', Icons.credit_card, (v) => v == null || v.isEmpty ? 'Requerido' : null),
               ],
               const SizedBox(height: 40),
               SizedBox(

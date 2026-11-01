@@ -70,6 +70,9 @@ class SupabaseOrderRepository implements OrderRepository {
   }
 
   @override
+  Future<CustomerOrder?> refreshPaymentStatus(String orderId) async => null;
+
+  @override
   Future<String?> saveOrder(CustomerOrder order) async {
     await client.from('orders').insert(order.toJson());
     _orders.add(order);

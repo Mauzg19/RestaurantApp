@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
+
 import '../session/session_manager.dart';
 
 class HttpApiException implements Exception {
@@ -16,13 +18,16 @@ class HttpApiException implements Exception {
 }
 
 class UnauthorizedApiException extends HttpApiException {
-  const UnauthorizedApiException([String message = 'Sesión expirada o no autorizada.'])
-      : super(401, message);
+  const UnauthorizedApiException([
+    String message = 'Sesión expirada o no autorizada.',
+  ]) : super(401, message);
 }
 
 class NetworkUnavailableException implements Exception {
   final String message;
-  const NetworkUnavailableException([this.message = 'No se pudo conectar al servidor de backend.']);
+  const NetworkUnavailableException([
+    this.message = 'No se pudo conectar al servidor de backend.',
+  ]);
 
   @override
   String toString() => message;
@@ -38,7 +43,10 @@ class HttpClientService {
     this.timeoutDuration = const Duration(seconds: 10),
   });
 
-  Map<String, String> _buildHeaders({bool requiresAuth = true, Map<String, String>? extraHeaders}) {
+  Map<String, String> _buildHeaders({
+    bool requiresAuth = true,
+    Map<String, String>? extraHeaders,
+  }) {
     final headers = <String, String>{
       'Content-Type': 'application/json; charset=UTF-8',
       'Accept': 'application/json',
@@ -48,7 +56,9 @@ class HttpClientService {
       final token = sessionManager!.getToken();
       if (token != null && token.isNotEmpty) {
         // El filtro Spring Boot espera "Bearer <token>"
-        headers['Authorization'] = token.startsWith('Bearer ') ? token : 'Bearer $token';
+        headers['Authorization'] = token.startsWith('Bearer ')
+            ? token
+            : 'Bearer $token';
       }
     }
 
@@ -59,20 +69,35 @@ class HttpClientService {
     return headers;
   }
 
-  Future<dynamic> get(String url, {bool requiresAuth = true}) async {
+  Future<dynamic> get(
+    String url, {
+    bool requiresAuth = true,
+    Duration? timeout,
+  }) async {
     try {
       final response = await http
-          .get(Uri.parse(url), headers: _buildHeaders(requiresAuth: requiresAuth))
-          .timeout(timeoutDuration);
+          .get(
+            Uri.parse(url),
+            headers: _buildHeaders(requiresAuth: requiresAuth),
+          )
+          .timeout(timeout ?? timeoutDuration);
       return _processResponse(response);
     } on SocketException {
-      throw const NetworkUnavailableException('Servidor inaccesible. Verifique que el backend Spring Boot esté activo.');
+      throw const NetworkUnavailableException(
+        'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
+      );
     } on TimeoutException {
-      throw const NetworkUnavailableException('Tiempo de espera agotado al conectar con el servidor.');
+      throw const NetworkUnavailableException(
+        'Tiempo de espera agotado al conectar con el servidor.',
+      );
     }
   }
 
-  Future<dynamic> post(String url, {required Map<String, dynamic> body, bool requiresAuth = true}) async {
+  Future<dynamic> post(
+    String url, {
+    required Map<String, dynamic> body,
+    bool requiresAuth = true,
+  }) async {
     try {
       final response = await http
           .post(
@@ -83,9 +108,13 @@ class HttpClientService {
           .timeout(timeoutDuration);
       return _processResponse(response);
     } on SocketException {
-      throw const NetworkUnavailableException('Servidor inaccesible. Verifique que el backend Spring Boot esté activo.');
+      throw const NetworkUnavailableException(
+        'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
+      );
     } on TimeoutException {
-      throw const NetworkUnavailableException('Tiempo de espera agotado al conectar con el servidor.');
+      throw const NetworkUnavailableException(
+        'Tiempo de espera agotado al conectar con el servidor.',
+      );
     }
   }
 
@@ -117,7 +146,11 @@ class HttpClientService {
     }
   }
 
-  Future<dynamic> patch(String url, {required Map<String, dynamic> body, bool requiresAuth = true}) async {
+  Future<dynamic> patch(
+    String url, {
+    required Map<String, dynamic> body,
+    bool requiresAuth = true,
+  }) async {
     try {
       final response = await http
           .patch(
@@ -128,13 +161,21 @@ class HttpClientService {
           .timeout(timeoutDuration);
       return _processResponse(response);
     } on SocketException {
-      throw const NetworkUnavailableException('Servidor inaccesible. Verifique que el backend Spring Boot esté activo.');
+      throw const NetworkUnavailableException(
+        'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
+      );
     } on TimeoutException {
-      throw const NetworkUnavailableException('Tiempo de espera agotado al conectar con el servidor.');
+      throw const NetworkUnavailableException(
+        'Tiempo de espera agotado al conectar con el servidor.',
+      );
     }
   }
 
-  Future<dynamic> put(String url, {required Map<String, dynamic> body, bool requiresAuth = true}) async {
+  Future<dynamic> put(
+    String url, {
+    required Map<String, dynamic> body,
+    bool requiresAuth = true,
+  }) async {
     try {
       final response = await http
           .put(
@@ -145,22 +186,33 @@ class HttpClientService {
           .timeout(timeoutDuration);
       return _processResponse(response);
     } on SocketException {
-      throw const NetworkUnavailableException('Servidor inaccesible. Verifique que el backend Spring Boot esté activo.');
+      throw const NetworkUnavailableException(
+        'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
+      );
     } on TimeoutException {
-      throw const NetworkUnavailableException('Tiempo de espera agotado al conectar con el servidor.');
+      throw const NetworkUnavailableException(
+        'Tiempo de espera agotado al conectar con el servidor.',
+      );
     }
   }
 
   Future<dynamic> delete(String url, {bool requiresAuth = true}) async {
     try {
       final response = await http
-          .delete(Uri.parse(url), headers: _buildHeaders(requiresAuth: requiresAuth))
+          .delete(
+            Uri.parse(url),
+            headers: _buildHeaders(requiresAuth: requiresAuth),
+          )
           .timeout(timeoutDuration);
       return _processResponse(response);
     } on SocketException {
-      throw const NetworkUnavailableException('Servidor inaccesible. Verifique que el backend Spring Boot esté activo.');
+      throw const NetworkUnavailableException(
+        'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
+      );
     } on TimeoutException {
-      throw const NetworkUnavailableException('Tiempo de espera agotado al conectar con el servidor.');
+      throw const NetworkUnavailableException(
+        'Tiempo de espera agotado al conectar con el servidor.',
+      );
     }
   }
 

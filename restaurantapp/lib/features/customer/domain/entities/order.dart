@@ -112,6 +112,7 @@ class CustomerOrder {
     required this.deliveryAddress,
     required this.paymentMethod,
     this.paymentIntentId,
+    this.clientRequestId,
     this.paymentStatus = 'pending',
     DateTime? createdAt,
     this.status = 'pending',
@@ -125,6 +126,7 @@ class CustomerOrder {
   final Address deliveryAddress;
   final PaymentMethod paymentMethod;
   final String? paymentIntentId;
+  final String? clientRequestId;
   final String paymentStatus;
   final DateTime createdAt;
   final String status;
@@ -139,15 +141,22 @@ class CustomerOrder {
       })
       .join(', ');
 
-  CustomerOrder copyWith({String? status}) => CustomerOrder(
-    id: id,
+  CustomerOrder copyWith({
+    String? id,
+    String? status,
+    String? paymentStatus,
+    String? paymentIntentId,
+    String? clientRequestId,
+  }) => CustomerOrder(
+    id: id ?? this.id,
     customerName: customerName,
     customerEmail: customerEmail,
     items: items,
     deliveryAddress: deliveryAddress,
     paymentMethod: paymentMethod,
-    paymentIntentId: paymentIntentId,
-    paymentStatus: paymentStatus,
+    paymentIntentId: paymentIntentId ?? this.paymentIntentId,
+    clientRequestId: clientRequestId ?? this.clientRequestId,
+    paymentStatus: paymentStatus ?? this.paymentStatus,
     createdAt: createdAt,
     status: status ?? this.status,
   );
@@ -195,6 +204,7 @@ class CustomerOrder {
         details: json['payment_details'] as String? ?? '',
       ),
       paymentIntentId: json['payment_intent_id'] as String?,
+      clientRequestId: json['client_request_id'] as String?,
       paymentStatus: json['payment_status'] as String? ?? 'pending',
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??

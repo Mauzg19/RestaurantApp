@@ -46,6 +46,8 @@ class ApiConfig {
   static String get addCartItemUrl => '$baseUrl/api/cart/add';
   static String get clearCartUrl => '$baseUrl/api/cart/clear';
   static String get createOrderUrl => '$baseUrl/api/order';
+  static String paymentStatusUrl(String orderId) =>
+      '$ordersUrl/$orderId/payment-status';
   static String foodAvailabilityUrl(String id) =>
       '$baseUrl/api/admin/food/$id/availability';
   static String foodByIdUrl(String id) => '$baseUrl/api/admin/food/$id';

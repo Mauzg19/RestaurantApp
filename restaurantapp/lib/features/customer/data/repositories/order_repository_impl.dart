@@ -26,6 +26,9 @@ class OrderRepositoryImpl implements OrderRepository {
   }
 
   @override
+  Future<CustomerOrder?> refreshPaymentStatus(String orderId) async => null;
+
+  @override
   Future<String?> saveOrder(CustomerOrder order) async {
     _orders.add(order);
     return null;

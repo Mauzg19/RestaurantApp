@@ -33,9 +33,9 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage> {
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar pedidos: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al cargar pedidos: $e')));
       }
     }
   }
@@ -43,13 +43,11 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage> {
   List<CustomerOrder> get _userOrders =>
       widget.orderRepository.getOrdersByEmail(widget.user.email);
 
-  List<CustomerOrder> get _activeOrders => _userOrders
-      .where((order) => order.status != 'delivered')
-      .toList();
+  List<CustomerOrder> get _activeOrders =>
+      _userOrders.where((order) => order.status != 'delivered').toList();
 
-  List<CustomerOrder> get _pastOrders => _userOrders
-      .where((order) => order.status == 'delivered')
-      .toList();
+  List<CustomerOrder> get _pastOrders =>
+      _userOrders.where((order) => order.status == 'delivered').toList();
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +56,10 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage> {
       appBar: AppBar(
         title: const Text(
           'Mis Pedidos',
-          style: TextStyle(color: Color(0xFF3B2115), fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF3B2115),
+            fontWeight: FontWeight.bold,
+          ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -86,11 +87,18 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage> {
                   padding: EdgeInsets.only(top: 60),
                   child: Column(
                     children: [
-                      Icon(Icons.receipt_long_outlined, size: 64, color: Color(0xFFEBDCCE)),
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        size: 64,
+                        color: Color(0xFFEBDCCE),
+                      ),
                       SizedBox(height: 16),
                       Text(
                         'Aún no has realizado pedidos.',
-                        style: TextStyle(color: Color(0xFF937A6B), fontSize: 16),
+                        style: TextStyle(
+                          color: Color(0xFF937A6B),
+                          fontSize: 16,
+                        ),
                       ),
                     ],
                   ),
@@ -110,13 +118,13 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        title,
-        style: const TextStyle(
-          color: Color(0xFF563524),
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      );
+    title,
+    style: const TextStyle(
+      color: Color(0xFF563524),
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
+  );
 }
 
 class _OrderCard extends StatelessWidget {
@@ -125,6 +133,22 @@ class _OrderCard extends StatelessWidget {
   final CustomerOrder order;
 
   Color get _statusColor {
+    if (order.status == 'pending_payment' &&
+        order.paymentStatus.toLowerCase() == 'pending') {
+      return Colors.orange;
+    }
+    if (order.paymentStatus.toLowerCase() == 'paid' &&
+        order.status.toLowerCase() == 'pending') {
+      return Colors.green;
+    }
+    switch (order.paymentStatus.toLowerCase()) {
+      case 'pending':
+        return Colors.orange;
+      case 'failed':
+        return Colors.red;
+      case 'cancelled':
+        return Colors.grey;
+    }
     switch (order.status) {
       case 'pending':
         return Colors.orange;
@@ -139,83 +163,102 @@ class _OrderCard extends StatelessWidget {
     }
   }
 
+  String get _statusLabel {
+    if (order.status == 'pending_payment' &&
+        order.paymentStatus.toLowerCase() == 'pending') {
+      return 'PAGO PENDIENTE';
+    }
+    if (order.paymentStatus.toLowerCase() == 'paid' &&
+        order.status.toLowerCase() == 'pending') {
+      return 'CONFIRMADO';
+    }
+    switch (order.paymentStatus.toLowerCase()) {
+      case 'failed':
+        return 'PAGO FALLIDO';
+      case 'cancelled':
+        return 'CANCELADO';
+      default:
+        return order.status.toUpperCase();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEBDCCE)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFEBDCCE)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Pedido #${order.id.substring(order.id.length > 6 ? order.id.length - 6 : 0)}',
-                        style: const TextStyle(
-                          color: Color(0xFF3B2115),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      _StatusBadge(status: order.status, color: _statusColor),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: order.items.map((item) {
-                      final notes = item.notes?.trim();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${item.quantity}× ${item.name}',
-                              style: const TextStyle(
-                                color: Color(0xFF937A6B),
-                                fontSize: 13,
-                              ),
-                            ),
-                            if (notes != null && notes.isNotEmpty)
-                              Text(
-                                'Personalización: $notes',
-                                style: const TextStyle(
-                                  color: Color(0xFF563524),
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 8),
                   Text(
-                    'Total: ${formatCop(order.total)}',
+                    'Pedido #${order.id.substring(order.id.length > 6 ? order.id.length - 6 : 0)}',
                     style: const TextStyle(
-                      color: AppTheme.accent,
+                      color: Color(0xFF3B2115),
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 16,
                     ),
                   ),
+                  _StatusBadge(status: _statusLabel, color: _statusColor),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFFEBDCCE)),
-          ],
+              const SizedBox(height: 4),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: order.items.map((item) {
+                  final notes = item.notes?.trim();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${item.quantity}× ${item.name}',
+                          style: const TextStyle(
+                            color: Color(0xFF937A6B),
+                            fontSize: 13,
+                          ),
+                        ),
+                        if (notes != null && notes.isNotEmpty)
+                          Text(
+                            'Personalización: $notes',
+                            style: const TextStyle(
+                              color: Color(0xFF563524),
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Total: ${formatCop(order.total)}',
+                style: const TextStyle(
+                  color: AppTheme.accent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
         ),
-      );
+        const SizedBox(width: 12),
+        const Icon(Icons.chevron_right_rounded, color: Color(0xFFEBDCCE)),
+      ],
+    ),
+  );
 }
 
 class _StatusBadge extends StatelessWidget {
@@ -226,20 +269,20 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
-        ),
-        child: Text(
-          status.toUpperCase(),
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withValues(alpha: 0.5)),
+    ),
+    child: Text(
+      status.toUpperCase(),
+      style: TextStyle(
+        color: color,
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.5,
+      ),
+    ),
+  );
 }
