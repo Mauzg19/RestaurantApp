@@ -251,6 +251,16 @@ class _OrderCard extends StatelessWidget {
                   fontSize: 14,
                 ),
               ),
+              if (order.discountAmount > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Descuento de premios: -${formatCop(order.discountAmount)}',
+                  style: const TextStyle(
+                    color: Color(0xFF2E7D32),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

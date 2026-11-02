@@ -11,7 +11,9 @@ import '../../../auth/domain/entities/auth_user.dart';
 import '../../data/repositories/order_repository_impl.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/product.dart';
+import '../../domain/entities/reward.dart';
 import '../../domain/repositories/order_repository.dart';
+import '../../domain/repositories/rewards_repository.dart';
 import '../../domain/repositories/user_settings_repository.dart';
 import '../../domain/usecases/get_products.dart';
 import '../../data/services/payment_service.dart';
@@ -25,6 +27,7 @@ class CustomerHomePage extends StatefulWidget {
     required this.user,
     required this.getProducts,
     this.orderRepository,
+    this.rewardsRepository,
     this.settingsRepository,
     this.paymentService,
     this.onLogout,
@@ -33,6 +36,7 @@ class CustomerHomePage extends StatefulWidget {
   final AuthUser user;
   final GetProducts getProducts;
   final OrderRepository? orderRepository;
+  final RewardsRepository? rewardsRepository;
   final UserSettingsRepository? settingsRepository;
   final PaymentService? paymentService;
   final void Function(BuildContext)? onLogout;
@@ -52,6 +56,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   int _checkoutStep = 0; // 0: Cart, 1: Confirmation
   bool _isRefreshingPayment = false;
   bool _paymentSyncErrorVisible = false;
+  RewardCatalogItem? _selectedReward;
 
   @override
   void initState() {
@@ -403,6 +408,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
           : const PaymentMethod(type: 'Stripe', details: 'Pago con Stripe'),
       paymentIntentId: paymentResult?.paymentIntentId,
       paymentStatus: paymentResult?.status ?? 'pending',
+      rewardId: _selectedReward?.id,
     );
 
     try {
@@ -670,6 +676,22 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               isValid: hasAddress,
               onTap: _goToDetails,
             ),
+            if (_selectedReward != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE5BF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_selectedReward!.name}: -${formatCop(_selectedReward!.discountAmount.toDouble())}. '
+                  'El servidor verificará el premio y el total antes de cobrar.',
+                  style: const TextStyle(color: Color(0xFF563524)),
+                ),
+              ),
+            ],
             const Spacer(),
             SizedBox(
               width: double.infinity,
@@ -690,7 +712,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     );
   }
 
-  void _goToProfile() => setState(() => _selectedTab = 3);
+  void _goToProfile() => setState(() => _selectedTab = 4);
 
   Future<void> _selectTab(int index) async {
     if (index == 2 && widget.orderRepository != null) {
@@ -821,6 +843,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               onOpenCart: () => _openCartSheet(context),
               onProfileTap: _goToProfile,
               onNotificationsTap: () => _showNotificationsSheet(context),
+              onRewardsTap: () => setState(() => _selectedTab = 3),
             ),
             _MenuTab(
               searchController: _searchController,
@@ -839,7 +862,13 @@ class _CustomerHomePageState extends State<CustomerHomePage>
               user: widget.user,
               orderRepository: widget.orderRepository ?? OrderRepositoryImpl(),
             ),
-            _SimpleTab(title: 'Recompensas', icon: Icons.star_border_rounded),
+            _RewardsTab(
+              user: widget.user,
+              repository: widget.rewardsRepository,
+              selectedRewardId: _selectedReward?.id,
+              onRewardSelected: (reward) =>
+                  setState(() => _selectedReward = reward),
+            ),
             _ProfileTab(
               user: widget.user,
               onLogout: _handleLogout,
@@ -979,6 +1008,7 @@ class _HomeContent extends StatelessWidget {
     required this.onOpenCart,
     required this.onProfileTap,
     required this.onNotificationsTap,
+    required this.onRewardsTap,
   });
 
   final AuthUser user;
@@ -994,6 +1024,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onOpenCart;
   final VoidCallback onProfileTap;
   final VoidCallback onNotificationsTap;
+  final VoidCallback onRewardsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1086,7 +1117,7 @@ class _HomeContent extends StatelessWidget {
             onProductTap: onProductTap,
           ),
           const SizedBox(height: 24),
-          const _RewardsBanner(),
+          _RewardsBanner(onTap: onRewardsTap),
         ],
       ),
     );
@@ -1917,7 +1948,9 @@ class _ProductVisual extends StatelessWidget {
 }
 
 class _RewardsBanner extends StatelessWidget {
-  const _RewardsBanner();
+  const _RewardsBanner({required this.onTap});
+
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1975,7 +2008,7 @@ class _RewardsBanner extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton(
-                  onPressed: () {},
+                  onPressed: onTap,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFC95D32),
                     visualDensity: VisualDensity.compact,
@@ -2020,7 +2053,7 @@ class _RewardsBanner extends StatelessWidget {
               ),
             ),
             FilledButton(
-              onPressed: () {},
+              onPressed: onTap,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFC95D32),
                 visualDensity: VisualDensity.compact,
@@ -2034,28 +2067,303 @@ class _RewardsBanner extends StatelessWidget {
   );
 }
 
-class _SimpleTab extends StatelessWidget {
-  const _SimpleTab({required this.title, required this.icon});
+class _RewardsTab extends StatefulWidget {
+  const _RewardsTab({
+    required this.user,
+    required this.repository,
+    required this.selectedRewardId,
+    required this.onRewardSelected,
+  });
 
-  final String title;
-  final IconData icon;
+  final AuthUser user;
+  final RewardsRepository? repository;
+  final int? selectedRewardId;
+  final ValueChanged<RewardCatalogItem?> onRewardSelected;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 64, color: AppTheme.accent),
-        const SizedBox(height: 16),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFF3B2115),
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
+  State<_RewardsTab> createState() => _RewardsTabState();
+}
+
+class _RewardsTabState extends State<_RewardsTab> {
+  late Future<RewardsSnapshot> _snapshot;
+  bool _isJoining = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshot = _load();
+  }
+
+  Future<RewardsSnapshot> _load() {
+    final repository = widget.repository;
+    if (repository == null) {
+      return Future.error(
+        StateError('El servicio de Restaurant Rewards no está configurado.'),
+      );
+    }
+    return repository.load();
+  }
+
+  Future<void> _refresh() async {
+    final refresh = _load();
+    setState(() => _snapshot = refresh);
+    await refresh;
+  }
+
+  Future<void> _join() async {
+    final repository = widget.repository;
+    if (repository == null || _isJoining) return;
+    setState(() => _isJoining = true);
+    try {
+      final joinedSnapshot = await repository.join();
+      if (!mounted) return;
+      setState(() => _snapshot = Future.value(joinedSnapshot));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo activar Restaurant Rewards: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isJoining = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFFFFF8F0),
+    appBar: AppBar(
+      title: const Text(
+        'Restaurant Rewards',
+        style: TextStyle(color: Color(0xFF3B2115), fontWeight: FontWeight.bold),
+      ),
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xFF3B2115),
+      elevation: 0,
+      actions: [
+        IconButton(
+          onPressed: _refresh,
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Actualizar recompensas',
         ),
       ],
+    ),
+    body: FutureBuilder<RewardsSnapshot>(
+      future: _snapshot,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off, size: 44, color: AppTheme.accent),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No se pudieron cargar tus recompensas: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF563524)),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _refresh,
+                    child: const Text('Reintentar'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final data = snapshot.data!;
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE5BF),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      data.joined
+                          ? 'Hola, ${widget.user.fullName}'
+                          : 'Premios por tus pedidos',
+                      style: const TextStyle(
+                        color: Color(0xFF563524),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      data.joined ? '${data.pointsBalance} puntos disponibles' : 'Únete gratis y gana 1 punto por cada \$1.000 COP efectivamente pagados.',
+                      style: const TextStyle(color: Color(0xFF563524)),
+                    ),
+                    if (!data.joined) ...[
+                      const SizedBox(height: 14),
+                      FilledButton(
+                        onPressed: _isJoining ? null : _join,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFC95D32),
+                        ),
+                        child: Text(
+                          _isJoining ? 'Activando...' : 'Unirme gratis',
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Premios disponibles',
+                style: TextStyle(
+                  color: Color(0xFF563524),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (data.catalog.isEmpty)
+                const _RewardsEmptyState(
+                  message: 'Aún no hay premios disponibles.',
+                )
+              else
+                ...data.catalog.map((reward) {
+                  final selected = widget.selectedRewardId == reward.id;
+                  final enoughPoints =
+                      data.joined &&
+                      data.pointsBalance >= reward.requiredPoints;
+                  return Card(
+                    color: Colors.white,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            reward.name,
+                            style: const TextStyle(
+                              color: Color(0xFF3B2115),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${reward.description} Compra mínima: ${formatCop(reward.minimumOrderAmount.toDouble())}.',
+                            style: const TextStyle(color: Color(0xFF937A6B)),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${reward.requiredPoints} puntos · ${formatCop(reward.discountAmount.toDouble())} de descuento',
+                                  style: const TextStyle(
+                                    color: Color(0xFF563524),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: !enoughPoints
+                                    ? null
+                                    : () => widget.onRewardSelected(
+                                        selected ? null : reward,
+                                      ),
+                                child: Text(
+                                  selected
+                                      ? 'Quitar'
+                                      : enoughPoints
+                                      ? 'Usar en mi pedido'
+                                      : data.joined
+                                      ? 'Faltan ${reward.requiredPoints - data.pointsBalance}'
+                                      : 'Únete para canjear',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              const SizedBox(height: 24),
+              const Text(
+                'Historial de puntos',
+                style: TextStyle(
+                  color: Color(0xFF563524),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (data.history.isEmpty)
+                const _RewardsEmptyState(
+                  message: 'Tus movimientos aparecerán aquí.',
+                )
+              else
+                ...data.history.map(
+                  (entry) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      entry.pointsDelta >= 0
+                          ? Icons.add_circle_outline
+                          : Icons.redeem,
+                      color: entry.pointsDelta >= 0
+                          ? Colors.green
+                          : AppTheme.accent,
+                    ),
+                    title: Text(
+                      entry.description,
+                      style: const TextStyle(color: Color(0xFF3B2115)),
+                    ),
+                    subtitle: Text(
+                      entry.createdAt == null
+                          ? ''
+                          : '${entry.createdAt!.toLocal()}',
+                      style: const TextStyle(color: Color(0xFF937A6B)),
+                    ),
+                    trailing: Text(
+                      '${entry.pointsDelta > 0 ? '+' : ''}${entry.pointsDelta}',
+                      style: const TextStyle(
+                        color: Color(0xFF563524),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _RewardsEmptyState extends StatelessWidget {
+  const _RewardsEmptyState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 18),
+    child: Center(
+      child: Text(message, style: const TextStyle(color: Color(0xFF937A6B))),
     ),
   );
 }

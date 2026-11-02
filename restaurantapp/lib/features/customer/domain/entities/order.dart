@@ -116,6 +116,9 @@ class CustomerOrder {
     this.paymentStatus = 'pending',
     DateTime? createdAt,
     this.status = 'pending',
+    this.rewardId,
+    this.discountAmount = 0,
+    this.finalTotal,
   }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
        createdAt = createdAt ?? DateTime.now();
 
@@ -130,8 +133,12 @@ class CustomerOrder {
   final String paymentStatus;
   final DateTime createdAt;
   final String status;
+  final int? rewardId;
+  final double discountAmount;
+  final double? finalTotal;
 
-  double get total => items.fold(0.0, (sum, item) => sum + item.subtotal);
+  double get total =>
+      finalTotal ?? items.fold(0.0, (sum, item) => sum + item.subtotal);
 
   String get summary => items
       .map((item) {
@@ -147,6 +154,8 @@ class CustomerOrder {
     String? paymentStatus,
     String? paymentIntentId,
     String? clientRequestId,
+    double? discountAmount,
+    double? finalTotal,
   }) => CustomerOrder(
     id: id ?? this.id,
     customerName: customerName,
@@ -159,6 +168,9 @@ class CustomerOrder {
     paymentStatus: paymentStatus ?? this.paymentStatus,
     createdAt: createdAt,
     status: status ?? this.status,
+    rewardId: rewardId,
+    discountAmount: discountAmount ?? this.discountAmount,
+    finalTotal: finalTotal ?? this.finalTotal,
   );
 
   Map<String, dynamic> toJson() => {
@@ -177,6 +189,8 @@ class CustomerOrder {
     'status': status,
     'created_at': createdAt.toUtc().toIso8601String(),
     'total': total,
+    'reward_id': rewardId,
+    'discount_amount': discountAmount,
   };
 
   factory CustomerOrder.fromJson(Map<String, dynamic> json) {
@@ -210,12 +224,18 @@ class CustomerOrder {
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
       status: json['status'] as String? ?? 'pending',
+      rewardId: _toNullableInt(json['reward_id']),
+      discountAmount: _toDouble(json['discount_amount']),
+      finalTotal: json['total'] == null ? null : _toDouble(json['total']),
     );
   }
 }
 
 int _toInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+
+int? _toNullableInt(dynamic value) =>
+    value is num ? value.toInt() : int.tryParse('$value');
 
 double _toDouble(dynamic value) =>
     value is num ? value.toDouble() : double.tryParse('$value') ?? 0;

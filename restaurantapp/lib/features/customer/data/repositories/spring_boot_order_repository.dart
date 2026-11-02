@@ -88,6 +88,7 @@ class SpringBootOrderRepository implements OrderRepository {
           'notes': order.deliveryAddress.notes,
         },
         'items': items,
+        'rewardId': order.rewardId,
       },
     );
     if (response is! Map) {
@@ -118,6 +119,10 @@ class SpringBootOrderRepository implements OrderRepository {
         status:
             response['order_status']?.toString().toLowerCase() ??
             'pending_payment',
+        discountAmount: _asDouble(response['discount_amount']),
+        finalTotal: response['total_amount'] == null
+            ? null
+            : _asDouble(response['total_amount']),
       ),
     );
     return paymentUrl;
@@ -214,11 +219,23 @@ class SpringBootOrderRepository implements OrderRepository {
               .toLowerCase(),
       createdAt: DateTime.tryParse(order['createdAt']?.toString() ?? ''),
       status: order['orderStatus']?.toString().toLowerCase() ?? 'pending',
+      rewardId: order['appliedReward'] is Map
+          ? _asNullableInt(
+              Map<String, dynamic>.from(order['appliedReward'] as Map)['id'],
+            )
+          : null,
+      discountAmount: _asDouble(order['discountAmount']),
+      finalTotal: order['totalAmount'] == null
+          ? null
+          : _asDouble(order['totalAmount']),
     );
   }
 
   int _asInt(dynamic value) =>
       value is num ? value.toInt() : int.tryParse('$value') ?? 1;
+
+  int? _asNullableInt(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value');
 
   double _asDouble(dynamic value, {double fallback = 0}) =>
       value is num ? value.toDouble() : double.tryParse('$value') ?? fallback;

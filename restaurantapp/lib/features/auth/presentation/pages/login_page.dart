@@ -7,6 +7,7 @@ import '../../domain/usecases/sign_in.dart';
 import '../../../administrator/presentation/pages/administrator_home_page.dart';
 import '../../../customer/domain/usecases/get_products.dart';
 import '../../../customer/domain/repositories/order_repository.dart';
+import '../../../customer/domain/repositories/rewards_repository.dart';
 import '../../../customer/domain/repositories/product_repository.dart';
 import '../../../customer/domain/repositories/user_settings_repository.dart';
 import '../../../customer/data/services/payment_service.dart';
@@ -25,6 +26,7 @@ class LoginPage extends StatefulWidget {
     required this.getAdministratorDashboard,
     required this.productRepository,
     this.orderRepository,
+    this.rewardsRepository,
     this.settingsRepository,
     this.paymentService,
   });
@@ -35,6 +37,7 @@ class LoginPage extends StatefulWidget {
   final GetAdministratorDashboard getAdministratorDashboard;
   final ProductRepository productRepository;
   final OrderRepository? orderRepository;
+  final RewardsRepository? rewardsRepository;
   final UserSettingsRepository? settingsRepository;
   final PaymentService? paymentService;
   @override
@@ -186,10 +189,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   /// Ofrece al usuario activar la huella digital después de un login exitoso.
-  void _offerBiometricSetup({
-    required String email,
-    required String password,
-  }) {
+  void _offerBiometricSetup({required String email, required String password}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       showDialog<void>(
@@ -256,6 +256,7 @@ class _LoginPageState extends State<LoginPage> {
                 user: signedInUser,
                 getProducts: widget.getProducts,
                 orderRepository: widget.orderRepository,
+                rewardsRepository: widget.rewardsRepository,
                 settingsRepository: widget.settingsRepository,
                 paymentService: widget.paymentService,
                 onLogout: (context) async {
@@ -272,6 +273,7 @@ class _LoginPageState extends State<LoginPage> {
                             widget.getAdministratorDashboard,
                         productRepository: widget.productRepository,
                         orderRepository: widget.orderRepository,
+                        rewardsRepository: widget.rewardsRepository,
                         settingsRepository: widget.settingsRepository,
                         paymentService: widget.paymentService,
                       ),
@@ -299,6 +301,7 @@ class _LoginPageState extends State<LoginPage> {
                             widget.getAdministratorDashboard,
                         productRepository: widget.productRepository,
                         orderRepository: widget.orderRepository,
+                        rewardsRepository: widget.rewardsRepository,
                         settingsRepository: widget.settingsRepository,
                       ),
                     ),

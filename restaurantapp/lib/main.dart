@@ -13,9 +13,11 @@ import 'features/administrator/data/repositories/administrator_repository_impl.d
 import 'features/administrator/domain/usecases/get_administrator_dashboard.dart';
 import 'features/customer/data/repositories/spring_boot_order_repository.dart';
 import 'features/customer/data/repositories/spring_boot_product_repository.dart';
+import 'features/customer/data/repositories/spring_boot_rewards_repository.dart';
 import 'features/customer/data/repositories/spring_boot_user_settings_repository.dart';
 import 'features/customer/data/services/payment_service.dart';
 import 'features/customer/domain/repositories/order_repository.dart';
+import 'features/customer/domain/repositories/rewards_repository.dart';
 import 'features/customer/domain/usecases/get_products.dart';
 import 'features/customer/domain/repositories/product_repository.dart';
 import 'features/customer/domain/repositories/user_settings_repository.dart';
@@ -41,6 +43,9 @@ Future<void> main() async {
   final settingsRepository = SpringBootUserSettingsRepository(
     httpClient: httpClient,
   );
+  final RewardsRepository rewardsRepository = SpringBootRewardsRepository(
+    httpClient: httpClient,
+  );
 
   final AuthRepository authRepository = SpringBootAuthRepository(
     httpClient: httpClient,
@@ -63,6 +68,7 @@ Future<void> main() async {
       productRepository: productRepository,
       orderRepository: orderRepository,
       settingsRepository: settingsRepository,
+      rewardsRepository: rewardsRepository,
       paymentService: null,
       initialUser: currentUser,
     ),
@@ -79,6 +85,7 @@ class RestaurantApp extends StatelessWidget {
     required this.productRepository,
     required this.orderRepository,
     required this.settingsRepository,
+    required this.rewardsRepository,
     this.paymentService,
     this.initialUser,
   });
@@ -90,6 +97,7 @@ class RestaurantApp extends StatelessWidget {
   final ProductRepository productRepository;
   final OrderRepository orderRepository;
   final UserSettingsRepository settingsRepository;
+  final RewardsRepository rewardsRepository;
   final PaymentService? paymentService;
   final AuthUser? initialUser;
 
@@ -108,6 +116,7 @@ class RestaurantApp extends StatelessWidget {
           productRepository: productRepository,
           orderRepository: orderRepository,
           settingsRepository: settingsRepository,
+          rewardsRepository: rewardsRepository,
           paymentService: paymentService,
         ),
       ),

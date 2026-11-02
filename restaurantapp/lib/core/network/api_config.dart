@@ -43,6 +43,10 @@ class ApiConfig {
   static String get currentUserUrl => '$baseUrl/api/users/profile';
   static String get deliveryAddressUrl => '$baseUrl/api/users/address';
   static String get userSettingsUrl => '$baseUrl/api/users/settings';
+  static String get rewardsUrl => '$baseUrl/api/rewards';
+  static String get rewardsJoinUrl => '$rewardsUrl/join';
+  static String get rewardsCatalogUrl => '$rewardsUrl/catalog';
+  static String get rewardsHistoryUrl => '$rewardsUrl/history';
   static String get addCartItemUrl => '$baseUrl/api/cart/add';
   static String get clearCartUrl => '$baseUrl/api/cart/clear';
   static String get createOrderUrl => '$baseUrl/api/order';
