@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/network/http_client_service.dart';
+import '../../../../core/offline/offline_sync_service.dart';
 import '../../../../core/services/cart_service.dart';
 import '../../../../core/services/biometric_auth_service.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -17,6 +18,8 @@ import '../../domain/repositories/rewards_repository.dart';
 import '../../domain/repositories/user_settings_repository.dart';
 import '../../domain/usecases/get_products.dart';
 import '../../data/services/payment_service.dart';
+import '../../../notifications/data/services/notification_center_service.dart';
+import '../../../notifications/domain/entities/app_notification.dart';
 import 'customer_orders_page.dart';
 import 'customer_details_page.dart';
 import 'product_detail_page.dart';
@@ -29,6 +32,8 @@ class CustomerHomePage extends StatefulWidget {
     this.orderRepository,
     this.rewardsRepository,
     this.settingsRepository,
+    this.notificationCenter,
+    this.offlineSyncService,
     this.paymentService,
     this.onLogout,
   });
@@ -38,6 +43,8 @@ class CustomerHomePage extends StatefulWidget {
   final OrderRepository? orderRepository;
   final RewardsRepository? rewardsRepository;
   final UserSettingsRepository? settingsRepository;
+  final NotificationCenterService? notificationCenter;
+  final OfflineSyncService? offlineSyncService;
   final PaymentService? paymentService;
   final void Function(BuildContext)? onLogout;
 
@@ -62,6 +69,12 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.notificationCenter?.addListener(_onNotificationsChanged);
+    if (widget.notificationCenter?.consumeOpenInboxRequest() ?? false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showNotificationsSheet(context);
+      });
+    }
     unawaited(_loadCategories());
     unawaited(_restoreCartAndPayments());
     _paymentStatusTimer = Timer.periodic(
@@ -74,12 +87,39 @@ class _CustomerHomePageState extends State<CustomerHomePage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshPendingPayment());
+      unawaited(_refreshNotifications());
+    }
+  }
+
+  void _onNotificationsChanged() {
+    if (!mounted) return;
+    setState(() {});
+    if (widget.notificationCenter?.consumeOpenInboxRequest() ?? false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showNotificationsSheet(context);
+      });
+    }
+  }
+
+  Future<void> _refreshNotifications() async {
+    try {
+      await widget.notificationCenter?.refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudieron sincronizar las notificaciones: $error',
+          ),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
     }
   }
 
   Future<void> _restoreCartAndPayments() async {
     try {
-      await CartService().loadCart();
+      await CartService().loadCart(ownerEmail: widget.user.email);
       if (!mounted) return;
       setState(() {});
       if (widget.orderRepository?.requiresCheckout ?? false) {
@@ -122,6 +162,10 @@ class _CustomerHomePageState extends State<CustomerHomePage>
       if (trackedOrder == null) return;
 
       var currentOrder = trackedOrder;
+      if (currentOrder.status == 'offline_pending' ||
+          currentOrder.id.startsWith('offline-')) {
+        return;
+      }
       if (currentOrder.paymentStatus.toLowerCase() == 'pending') {
         currentOrder =
             await repository.refreshPaymentStatus(currentOrder.id) ??
@@ -414,7 +458,21 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     try {
       final paymentUrl = await widget.orderRepository!.saveOrder(order);
       if (usesBackendCheckout) {
-        final uri = Uri.tryParse(paymentUrl ?? '');
+        if (paymentUrl == null || paymentUrl.isEmpty) {
+          if (!context.mounted) return;
+          Navigator.pop(context);
+          if (!mounted) return;
+          setState(() => _selectedTab = 2);
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Pedido guardado en este dispositivo. Se sincronizará al recuperar la conexión; el pago aún no se ha realizado.',
+              ),
+            ),
+          );
+          return;
+        }
+        final uri = Uri.tryParse(paymentUrl);
         if (uri == null ||
             !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
           throw StateError(
@@ -754,67 +812,43 @@ class _CustomerHomePageState extends State<CustomerHomePage>
     Navigator.of(context).pop();
   }
 
-  void _showNotificationsSheet(BuildContext context) {
-    showModalBottomSheet<void>(
+  Future<void> _showNotificationsSheet(BuildContext context) async {
+    final center = widget.notificationCenter;
+    if (center != null) {
+      try {
+        await center.refresh();
+        await center.markAllAsRead();
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron cargar las notificaciones: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+    }
+    if (!context.mounted) return;
+    await showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEBDCCE),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+      builder: (context) => center == null
+          ? const _CustomerNotificationSheet(notifications: [])
+          : AnimatedBuilder(
+              animation: center,
+              builder: (context, _) => _CustomerNotificationSheet(
+                notifications: center.notifications,
               ),
-              const Text(
-                'Notificaciones',
-                style: TextStyle(
-                  color: Color(0xFF3B2115),
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.notifications_none_rounded,
-                      size: 56,
-                      color: AppTheme.accent.withValues(alpha: 0.45),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'No tienes notificaciones nuevas',
-                      style: TextStyle(color: Color(0xFF937A6B), fontSize: 15),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.notificationCenter?.removeListener(_onNotificationsChanged);
     _paymentStatusTimer?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -830,6 +864,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
           children: [
             _HomeContent(
               user: widget.user,
+              notificationCenter: widget.notificationCenter,
               searchController: _searchController,
               categories: _categories,
               selectedCategory: _selectedCategory,
@@ -861,6 +896,7 @@ class _CustomerHomePageState extends State<CustomerHomePage>
             CustomerOrdersPage(
               user: widget.user,
               orderRepository: widget.orderRepository ?? OrderRepositoryImpl(),
+              offlineSyncService: widget.offlineSyncService,
             ),
             _RewardsTab(
               user: widget.user,
@@ -996,6 +1032,7 @@ class _ConfirmationTile extends StatelessWidget {
 class _HomeContent extends StatelessWidget {
   const _HomeContent({
     required this.user,
+    required this.notificationCenter,
     required this.searchController,
     required this.categories,
     required this.selectedCategory,
@@ -1012,6 +1049,7 @@ class _HomeContent extends StatelessWidget {
   });
 
   final AuthUser user;
+  final NotificationCenterService? notificationCenter;
   final TextEditingController searchController;
   final List<ProductCategoryOption> categories;
   final String? selectedCategory;
@@ -1088,8 +1126,8 @@ class _HomeContent extends StatelessWidget {
                 onPressed: onProfileTap,
               ),
               const SizedBox(width: 8),
-              _HeaderIcon(
-                icon: Icons.notifications_none_rounded,
+              _NotificationHeaderIcon(
+                unreadCount: notificationCenter?.unreadCount ?? 0,
                 onPressed: onNotificationsTap,
               ),
             ],
@@ -1122,6 +1160,142 @@ class _HomeContent extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CustomerNotificationSheet extends StatelessWidget {
+  const _CustomerNotificationSheet({required this.notifications});
+
+  final List<AppNotification> notifications;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEBDCCE),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const Text(
+            'Notificaciones',
+            style: TextStyle(
+              color: Color(0xFF3B2115),
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (notifications.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  'Aún no tienes notificaciones.',
+                  style: TextStyle(color: Color(0xFF937A6B), fontSize: 15),
+                ),
+              ),
+            )
+          else
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: notifications.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final notification = notifications[index];
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8F0),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFEBDCCE)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          notification.title,
+                          style: const TextStyle(
+                            color: Color(0xFF3B2115),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          notification.message,
+                          style: const TextStyle(color: Color(0xFF6F584A)),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _notificationDateLabel(notification.sentAt),
+                          style: const TextStyle(
+                            color: Color(0xFF937A6B),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _NotificationHeaderIcon extends StatelessWidget {
+  const _NotificationHeaderIcon({
+    required this.unreadCount,
+    required this.onPressed,
+  });
+
+  final int unreadCount;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      _HeaderIcon(
+        icon: unreadCount == 0
+            ? Icons.notifications_none_rounded
+            : Icons.notifications_active_rounded,
+        onPressed: onPressed,
+      ),
+      if (unreadCount > 0)
+        Positioned(
+          right: 0,
+          top: 0,
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: const BoxDecoration(
+              color: AppTheme.accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+String _notificationDateLabel(DateTime sentAt) {
+  final date = sentAt.toLocal();
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year} '
+      '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
 }
 
 class _LogoMark extends StatelessWidget {

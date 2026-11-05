@@ -36,15 +36,23 @@ class CartService extends ChangeNotifier {
   final Map<String, CartItem> _items = {};
   static const String _storageKey = 'customer_cart_persistence';
   static const String _checkoutRequestKey = 'customer_checkout_request_id';
+  String _ownerEmail = 'anonymous';
+
+  String get _ownerCartKey => '$_storageKey:$_ownerEmail';
+  String get _ownerCheckoutKey => '$_checkoutRequestKey:$_ownerEmail';
 
   Map<String, CartItem> get items => Map.unmodifiable(_items);
 
   int get totalCount => _items.values.fold(0, (sum, item) => sum + item.quantity);
 
   /// Carga el carrito desde SharedPreferences al iniciar la app
-  Future<void> loadCart() async {
+  Future<void> loadCart({String? ownerEmail}) async {
+    if (ownerEmail != null && ownerEmail.trim().isNotEmpty) {
+      _ownerEmail = ownerEmail.trim().toLowerCase();
+    }
     final prefs = await SharedPreferences.getInstance();
-    final String? cartJson = prefs.getString(_storageKey);
+    final String? cartJson = prefs.getString(_ownerCartKey);
+    _items.clear();
     if (cartJson != null) {
       final Map<String, dynamic> decoded = jsonDecode(cartJson);
       final Map<String, CartItem> loadedItems = {};
@@ -68,7 +76,7 @@ class CartService extends ChangeNotifier {
       jsonMap[key] = item.toJson();
     });
 
-    await prefs.setString(_storageKey, jsonEncode(jsonMap));
+    await prefs.setString(_ownerCartKey, jsonEncode(jsonMap));
   }
 
   /// Añade o incrementa un producto en el carrito
@@ -117,13 +125,13 @@ class CartService extends ChangeNotifier {
   Future<void> clearCart() async {
     _items.clear();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_storageKey);
+    await prefs.remove(_ownerCartKey);
     notifyListeners();
   }
 
   Future<String> getOrCreateCheckoutRequestId() async {
     final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString(_checkoutRequestKey);
+    final existing = prefs.getString(_ownerCheckoutKey);
     if (existing != null && existing.isNotEmpty) return existing;
 
     final random = Random.secure();
@@ -134,22 +142,22 @@ class CartService extends ChangeNotifier {
     final requestId =
         '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
-    await prefs.setString(_checkoutRequestKey, requestId);
+    await prefs.setString(_ownerCheckoutKey, requestId);
     return requestId;
   }
 
   Future<String?> getCheckoutRequestId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_checkoutRequestKey);
+    return prefs.getString(_ownerCheckoutKey);
   }
 
   Future<void> clearCheckoutRequestId({String? expectedRequestId}) async {
     final prefs = await SharedPreferences.getInstance();
     if (expectedRequestId != null &&
-        prefs.getString(_checkoutRequestKey) != expectedRequestId) {
+        prefs.getString(_ownerCheckoutKey) != expectedRequestId) {
       return;
     }
-    await prefs.remove(_checkoutRequestKey);
+    await prefs.remove(_ownerCheckoutKey);
   }
 
   Future<void> removePurchasedItems(Iterable<CartItem> purchasedItems) async {

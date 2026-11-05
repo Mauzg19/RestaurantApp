@@ -9,7 +9,10 @@ abstract interface class ProductRepository {
 
   Future<void> load();
 
-  Future<void> saveProduct(Product product, {ProductCategoryOption? category});
+  Future<String?> saveProduct(
+    Product product, {
+    ProductCategoryOption? category,
+  });
 
   Future<void> updateProductAvailability(String productId, bool isAvailable);
 

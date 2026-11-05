@@ -47,7 +47,7 @@ class SupabaseProductRepository implements ProductRepository {
   }
 
   @override
-  Future<void> saveProduct(
+  Future<String?> saveProduct(
     Product product, {
     ProductCategoryOption? category,
   }) async {
@@ -58,6 +58,7 @@ class SupabaseProductRepository implements ProductRepository {
       _products[index] = product;
     }
     unawaited(_upsert(product));
+    return product.id;
   }
 
   @override

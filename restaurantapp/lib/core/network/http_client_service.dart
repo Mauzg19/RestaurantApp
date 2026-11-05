@@ -43,7 +43,7 @@ class HttpClientService {
     this.timeoutDuration = const Duration(seconds: 10),
   });
 
-  Map<String, String> _buildHeaders({
+    Map<String, String> _buildHeaders({
     bool requiresAuth = true,
     Map<String, String>? extraHeaders,
   }) {
@@ -52,10 +52,9 @@ class HttpClientService {
       'Accept': 'application/json',
     };
 
-    if (requiresAuth && sessionManager != null) {
-      final token = sessionManager!.getToken();
+    if (requiresAuth) {
+      final token = sessionManager?.getToken();
       if (token != null && token.isNotEmpty) {
-        // El filtro Spring Boot espera "Bearer <token>"
         headers['Authorization'] = token.startsWith('Bearer ')
             ? token
             : 'Bearer $token';
@@ -82,6 +81,8 @@ class HttpClientService {
           )
           .timeout(timeout ?? timeoutDuration);
       return _processResponse(response);
+    } on http.ClientException catch (error) {
+      throw NetworkUnavailableException(error.message);
     } on SocketException {
       throw const NetworkUnavailableException(
         'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
@@ -107,6 +108,8 @@ class HttpClientService {
           )
           .timeout(timeoutDuration);
       return _processResponse(response);
+    } on http.ClientException catch (error) {
+      throw NetworkUnavailableException(error.message);
     } on SocketException {
       throw const NetworkUnavailableException(
         'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
@@ -135,6 +138,8 @@ class HttpClientService {
       final streamedResponse = await request.send().timeout(timeoutDuration);
       final response = await http.Response.fromStream(streamedResponse);
       return _processResponse(response);
+    } on http.ClientException catch (error) {
+      throw NetworkUnavailableException(error.message);
     } on SocketException {
       throw const NetworkUnavailableException(
         'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
@@ -160,6 +165,8 @@ class HttpClientService {
           )
           .timeout(timeoutDuration);
       return _processResponse(response);
+    } on http.ClientException catch (error) {
+      throw NetworkUnavailableException(error.message);
     } on SocketException {
       throw const NetworkUnavailableException(
         'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
@@ -185,6 +192,8 @@ class HttpClientService {
           )
           .timeout(timeoutDuration);
       return _processResponse(response);
+    } on http.ClientException catch (error) {
+      throw NetworkUnavailableException(error.message);
     } on SocketException {
       throw const NetworkUnavailableException(
         'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',
@@ -205,6 +214,8 @@ class HttpClientService {
           )
           .timeout(timeoutDuration);
       return _processResponse(response);
+    } on http.ClientException catch (error) {
+      throw NetworkUnavailableException(error.message);
     } on SocketException {
       throw const NetworkUnavailableException(
         'Servidor inaccesible. Verifique que el backend Spring Boot esté activo.',

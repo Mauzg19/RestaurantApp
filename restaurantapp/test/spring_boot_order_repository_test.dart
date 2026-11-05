@@ -6,6 +6,28 @@ import 'package:restaurantapp/features/customer/domain/entities/order.dart';
 
 void main() {
   test(
+    'uses the restaurant id after the product repository loads it',
+    () async {
+      final client = _FakeHttpClient()..getResponse = <dynamic>[];
+      int? restaurantId;
+      final repository = SpringBootOrderRepository(
+        httpClient: client,
+        restaurantId: null,
+        restaurantIdProvider: () => restaurantId,
+        isAdministrator: () => true,
+      );
+
+      restaurantId = 27;
+      await repository.load();
+
+      expect(
+        client.getUrl,
+        '${ApiConfig.baseUrl}/api/admin/order/restaurant/27',
+      );
+    },
+  );
+
+  test(
     'creates checkout with item quantities and refreshes the backend status',
     () async {
       final client = _FakeHttpClient();

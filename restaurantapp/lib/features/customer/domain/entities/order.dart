@@ -113,6 +113,7 @@ class CustomerOrder {
     required this.paymentMethod,
     this.paymentIntentId,
     this.clientRequestId,
+    this.checkoutUrl,
     this.paymentStatus = 'pending',
     DateTime? createdAt,
     this.status = 'pending',
@@ -130,6 +131,7 @@ class CustomerOrder {
   final PaymentMethod paymentMethod;
   final String? paymentIntentId;
   final String? clientRequestId;
+  final String? checkoutUrl;
   final String paymentStatus;
   final DateTime createdAt;
   final String status;
@@ -154,6 +156,7 @@ class CustomerOrder {
     String? paymentStatus,
     String? paymentIntentId,
     String? clientRequestId,
+    String? checkoutUrl,
     double? discountAmount,
     double? finalTotal,
   }) => CustomerOrder(
@@ -165,6 +168,7 @@ class CustomerOrder {
     paymentMethod: paymentMethod,
     paymentIntentId: paymentIntentId ?? this.paymentIntentId,
     clientRequestId: clientRequestId ?? this.clientRequestId,
+    checkoutUrl: checkoutUrl ?? this.checkoutUrl,
     paymentStatus: paymentStatus ?? this.paymentStatus,
     createdAt: createdAt,
     status: status ?? this.status,
@@ -185,6 +189,8 @@ class CustomerOrder {
     'payment_type': paymentMethod.type,
     'payment_details': paymentMethod.details,
     'payment_intent_id': paymentIntentId,
+    'client_request_id': clientRequestId,
+    'checkout_url': checkoutUrl,
     'payment_status': paymentStatus,
     'status': status,
     'created_at': createdAt.toUtc().toIso8601String(),
@@ -219,6 +225,7 @@ class CustomerOrder {
       ),
       paymentIntentId: json['payment_intent_id'] as String?,
       clientRequestId: json['client_request_id'] as String?,
+      checkoutUrl: json['checkout_url'] as String?,
       paymentStatus: json['payment_status'] as String? ?? 'pending',
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??

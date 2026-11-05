@@ -43,6 +43,11 @@ class ApiConfig {
   static String get currentUserUrl => '$baseUrl/api/users/profile';
   static String get deliveryAddressUrl => '$baseUrl/api/users/address';
   static String get userSettingsUrl => '$baseUrl/api/users/settings';
+  static String get notificationsUrl => '$baseUrl/api/notifications';
+  static String get notificationsReadAllUrl => '$notificationsUrl/read-all';
+  static String notificationReadUrl(int id) => '$notificationsUrl/$id/read';
+  static String get notificationDeviceTokenUrl =>
+      '$notificationsUrl/device-token';
   static String get rewardsUrl => '$baseUrl/api/rewards';
   static String get rewardsJoinUrl => '$rewardsUrl/join';
   static String get rewardsCatalogUrl => '$rewardsUrl/catalog';

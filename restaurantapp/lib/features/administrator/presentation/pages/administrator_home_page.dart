@@ -4,12 +4,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/offline/offline_sync_service.dart';
 import '../../../auth/domain/entities/auth_user.dart';
 import '../../../customer/domain/entities/product.dart';
 import '../../../customer/domain/repositories/order_repository.dart';
 import '../../../customer/domain/repositories/product_repository.dart';
 import '../../domain/entities/administrator_dashboard.dart';
 import '../../domain/usecases/get_administrator_dashboard.dart';
+import '../../../notifications/data/services/notification_center_service.dart';
+import '../../../notifications/domain/entities/app_notification.dart';
 
 class AdministratorHomePage extends StatefulWidget {
   const AdministratorHomePage({
@@ -18,6 +21,8 @@ class AdministratorHomePage extends StatefulWidget {
     required this.getDashboard,
     required this.productRepository,
     this.orderRepository,
+    this.notificationCenter,
+    this.offlineSyncService,
     this.onLogout,
   });
 
@@ -25,6 +30,8 @@ class AdministratorHomePage extends StatefulWidget {
   final GetAdministratorDashboard getDashboard;
   final ProductRepository productRepository;
   final OrderRepository? orderRepository;
+  final NotificationCenterService? notificationCenter;
+  final OfflineSyncService? offlineSyncService;
   final void Function(BuildContext)? onLogout;
 
   @override
@@ -32,21 +39,66 @@ class AdministratorHomePage extends StatefulWidget {
 }
 
 class _AdministratorHomePageState extends State<AdministratorHomePage> {
-  late final List<DashboardMetric> _metrics;
+  late List<DashboardMetric> _metrics;
   late List<DashboardOrder> _orders;
   late List<DashboardMenuItem> _menu;
   int _selectedTab = 0;
   String _orderFilter = 'Todos';
   String _menuQuery = '';
-  bool _hasUnreadNotifications = true;
-
   @override
   void initState() {
     super.initState();
+    widget.notificationCenter?.addListener(_onNotificationsChanged);
+    widget.offlineSyncService?.addListener(_onSyncStateChanged);
+    if (widget.notificationCenter?.consumeOpenInboxRequest() ?? false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showNotifications();
+      });
+    }
     final dashboard = widget.getDashboard();
     _metrics = dashboard.metrics;
     _orders = [...dashboard.orders];
     _menu = [...dashboard.menu];
+  }
+
+  void _onSyncStateChanged() {
+    if (widget.offlineSyncService?.state == OfflineSyncState.synchronized) {
+      _refreshAfterSync();
+    }
+  }
+
+  Future<void> _refreshAfterSync() async {
+    try {
+      await widget.productRepository.load();
+      await widget.orderRepository?.load();
+      final dashboard = widget.getDashboard();
+      if (!mounted) return;
+      setState(() {
+        _metrics = dashboard.metrics;
+        _orders = [...dashboard.orders];
+        _menu = [...dashboard.menu];
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudieron actualizar los datos sincronizados: $error',
+          ),
+          backgroundColor: const Color(0xFFB3261E),
+        ),
+      );
+    }
+  }
+
+  void _onNotificationsChanged() {
+    if (!mounted) return;
+    setState(() {});
+    if (widget.notificationCenter?.consumeOpenInboxRequest() ?? false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showNotifications();
+      });
+    }
   }
 
   List<DashboardOrder> get _filteredOrders {
@@ -175,7 +227,9 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Eliminar producto'),
-        content: Text('¿Estás seguro de que deseas eliminar "${item.name}"? Esta acción no se puede deshacer.'),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar "${item.name}"? Esta acción no se puede deshacer.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -183,7 +237,9 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3261E)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB3261E),
+            ),
             child: const Text('Eliminar'),
           ),
         ],
@@ -213,71 +269,36 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
   }
 
   Future<void> _showNotifications() async {
-    setState(() => _hasUnreadNotifications = false);
+    final center = widget.notificationCenter;
+    if (center != null) {
+      try {
+        await center.refresh();
+        await center.markAllAsRead();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron cargar las notificaciones: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Notificaciones',
-                      style: AppTheme.serif(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.offBlack,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.periwinkle,
-                      borderRadius: BorderRadius.circular(9999),
-                    ),
-                    child: Text(
-                      'OPERACIÓN',
-                      style: AppTheme.mono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.lakeBlue,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                ],
+      builder: (context) => center == null
+          ? const _AdministratorNotificationSheet(notifications: [])
+          : AnimatedBuilder(
+              animation: center,
+              builder: (context, _) => _AdministratorNotificationSheet(
+                notifications: center.notifications,
               ),
-              const SizedBox(height: 16),
-              _NotificationTile(
-                icon: Icons.warning_amber_rounded,
-                iconColor: AppTheme.coral,
-                title: '2 productos tienen stock bajo.',
-                time: 'Hace 5m',
-              ),
-              const SizedBox(height: 10),
-              _NotificationTile(
-                icon: Icons.receipt_long,
-                iconColor: AppTheme.lakeBlue,
-                title: 'Hay pedidos pendientes de atención.',
-                time: 'Hace 12m',
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -353,7 +374,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<ProductCategoryOption>(
-                    value: selectedCategory,
+                    initialValue: selectedCategory,
                     decoration: const InputDecoration(
                       labelText: 'Categoría',
                       hintText: 'Selecciona una categoría',
@@ -481,41 +502,13 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
     stock.dispose();
     if (result == null) return;
 
-    String? savedImagePath;
-    try {
-      if (imageBytes != null) {
-        savedImagePath = await widget.productRepository.uploadProductImageBytes(
-          imageBytes!,
-          imageFileName ?? 'product.jpg',
-          result.id,
-        );
-      } else if (result.imagePath != null &&
-          !result.imagePath!.startsWith('http')) {
-        savedImagePath = await widget.productRepository.uploadProductImage(
-          result.imagePath!,
-          result.id,
-        );
-      } else {
-        savedImagePath = result.imagePath;
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo subir la imagen: $e'),
-          backgroundColor: const Color(0xFFB3261E),
-        ),
-      );
-      return;
-    }
-
     final categoryValue = _categoryFromLabel(result.category);
     final categoryOption = categories.firstWhere(
       (category) => category.name == result.category,
     );
-
+    var savedImagePath = result.imagePath;
     try {
-      await widget.productRepository.saveProduct(
+      final savedProductId = await widget.productRepository.saveProduct(
         Product(
           id: result.id,
           name: result.name,
@@ -525,15 +518,29 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
           icon: categoryValue.icon,
           accentColor: AppTheme.accent,
           isAvailable: result.isAvailable,
-          imagePath: savedImagePath,
+          imagePath: result.imagePath,
         ),
         category: categoryOption,
       );
+      final productId = savedProductId ?? result.id;
+      if (imageBytes != null) {
+        savedImagePath = await widget.productRepository.uploadProductImageBytes(
+          imageBytes!,
+          imageFileName ?? 'product.jpg',
+          productId,
+        );
+      } else if (result.imagePath != null &&
+          !result.imagePath!.startsWith('http')) {
+        savedImagePath = await widget.productRepository.uploadProductImage(
+          result.imagePath!,
+          productId,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al guardar el producto: $error'),
+          content: Text('No se pudo guardar el producto o su imagen: $error'),
           backgroundColor: const Color(0xFFB3261E),
         ),
       );
@@ -542,11 +549,16 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
 
     setState(
       () => _menu = product == null
-          ? [..._menu, result.copyWith(imagePath: savedImagePath)]
+          ? [
+              ..._menu,
+              result.copyWith(imagePath: savedImagePath ?? result.imagePath),
+            ]
           : _menu
                 .map(
                   (item) => item.name == product.name
-                      ? result.copyWith(imagePath: savedImagePath)
+                      ? result.copyWith(
+                          imagePath: savedImagePath ?? result.imagePath,
+                        )
                       : item,
                 )
                 .toList(),
@@ -591,7 +603,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
               metrics: _metrics,
               orders: _orders,
               menu: _menu,
-              hasUnread: _hasUnreadNotifications,
+              hasUnread: (widget.notificationCenter?.unreadCount ?? 0) > 0,
               onNotifications: _showNotifications,
               onAdvance: _advanceOrder,
               onAvailabilityChanged: _updateAvailability,
@@ -668,6 +680,13 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    widget.notificationCenter?.removeListener(_onNotificationsChanged);
+    widget.offlineSyncService?.removeListener(_onSyncStateChanged);
+    super.dispose();
   }
 }
 
@@ -1428,11 +1447,13 @@ class _OrderCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            order.items.map((item) {
-              final notes = item.notes?.trim();
-              return '${item.quantity}x ${item.name}'
-                  '${notes == null || notes.isEmpty ? '' : ' ($notes)'}';
-            }).join('\n'),
+            order.items
+                .map((item) {
+                  final notes = item.notes?.trim();
+                  return '${item.quantity}x ${item.name}'
+                      '${notes == null || notes.isEmpty ? '' : ' ($notes)'}';
+                })
+                .join('\n'),
             style: AppTheme.serif(fontSize: 11, color: AppTheme.graphite),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
@@ -1695,12 +1716,14 @@ class _NotificationTile extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     required this.title,
+    required this.message,
     required this.time,
   });
 
   final IconData icon;
   final Color iconColor;
   final String title;
+  final String message;
   final String time;
 
   @override
@@ -1723,19 +1746,83 @@ class _NotificationTile extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            title,
-            style: AppTheme.mono(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.offBlack,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTheme.mono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.offBlack,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                message,
+                style: AppTheme.mono(fontSize: 11, color: AppTheme.smoke),
+              ),
+            ],
           ),
         ),
+        const SizedBox(width: 8),
         Text(time, style: AppTheme.mono(fontSize: 11, color: AppTheme.smoke)),
       ],
     ),
   );
+}
+
+class _AdministratorNotificationSheet extends StatelessWidget {
+  const _AdministratorNotificationSheet({required this.notifications});
+
+  final List<AppNotification> notifications;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Notificaciones',
+            style: AppTheme.serif(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.offBlack,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (notifications.isEmpty)
+            const _EmptyState(message: 'No tienes notificaciones nuevas.')
+          else
+            ...notifications.map((notification) {
+              final isStock = notification.type.contains('STOCK');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _NotificationTile(
+                  icon: isStock
+                      ? Icons.warning_amber_rounded
+                      : Icons.receipt_long,
+                  iconColor: isStock ? AppTheme.coral : AppTheme.lakeBlue,
+                  title: notification.title,
+                  message: notification.message,
+                  time: _notificationDateLabel(notification.sentAt),
+                ),
+              );
+            }),
+        ],
+      ),
+    ),
+  );
+}
+
+String _notificationDateLabel(DateTime sentAt) {
+  final date = sentAt.toLocal();
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year} '
+      '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
 }
 
 class _EmptyState extends StatelessWidget {

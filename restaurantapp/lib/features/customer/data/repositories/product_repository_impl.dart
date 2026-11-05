@@ -71,7 +71,7 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<void> load() async {}
 
   @override
-  Future<void> saveProduct(
+  Future<String?> saveProduct(
     Product product, {
     ProductCategoryOption? category,
   }) async {
@@ -81,6 +81,7 @@ class ProductRepositoryImpl implements ProductRepository {
     } else {
       _products[index] = product;
     }
+    return product.id;
   }
 
   @override

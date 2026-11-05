@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../administrator/domain/usecases/get_administrator_dashboard.dart';
@@ -14,6 +16,9 @@ import '../../../customer/data/services/payment_service.dart';
 import '../../../customer/presentation/pages/customer_home_page.dart';
 import '../../../../core/session/session_manager.dart';
 import '../../../../core/services/biometric_auth_service.dart';
+import '../../../../core/network/http_client_service.dart';
+import '../../../../core/offline/offline_sync_service.dart';
+import '../../../notifications/data/services/notification_center_service.dart';
 import 'register_page.dart';
 import '../widgets/auth_page_widgets.dart';
 
@@ -28,7 +33,10 @@ class LoginPage extends StatefulWidget {
     this.orderRepository,
     this.rewardsRepository,
     this.settingsRepository,
+    this.notificationCenter,
+    this.offlineSyncService,
     this.paymentService,
+    this.initialUser,
   });
 
   final SignIn signIn;
@@ -39,7 +47,10 @@ class LoginPage extends StatefulWidget {
   final OrderRepository? orderRepository;
   final RewardsRepository? rewardsRepository;
   final UserSettingsRepository? settingsRepository;
+  final NotificationCenterService? notificationCenter;
+  final OfflineSyncService? offlineSyncService;
   final PaymentService? paymentService;
+  final AuthUser? initialUser;
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -59,7 +70,13 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    _checkBiometric();
+    if (widget.initialUser != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigateToHome(widget.initialUser!);
+      });
+    } else {
+      _checkBiometric();
+    }
   }
 
   /// Verifica si la biometría está disponible y habilitada, e intenta
@@ -235,6 +252,9 @@ class _LoginPageState extends State<LoginPage> {
 
   /// Navega a la pantalla principal según el rol del usuario.
   Future<void> _navigateToHome(AuthUser signedInUser) async {
+    unawaited(
+      widget.offlineSyncService?.checkNow() ?? Future<void>.value(),
+    );
     try {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await widget.productRepository.load();
@@ -248,6 +268,21 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     }
+    try {
+      await widget.notificationCenter?.startForAuthenticatedUser();
+    } on NetworkUnavailableException {
+      // Offline mode does not block access to the previously established session.
+    } catch (error) {
+      if (mounted &&
+          widget.offlineSyncService?.state != OfflineSyncState.offline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron activar las notificaciones: $error'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
+      }
+    }
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -257,10 +292,29 @@ class _LoginPageState extends State<LoginPage> {
                 getProducts: widget.getProducts,
                 orderRepository: widget.orderRepository,
                 rewardsRepository: widget.rewardsRepository,
+                notificationCenter: widget.notificationCenter,
+                offlineSyncService: widget.offlineSyncService,
                 settingsRepository: widget.settingsRepository,
                 paymentService: widget.paymentService,
                 onLogout: (context) async {
                   final session = await SessionManager.getInstance();
+                  try {
+                    await widget.notificationCenter?.endAuthenticatedSession();
+                  } on NetworkUnavailableException {
+                    // The local session can be cleared without contacting the server.
+                  } catch (error) {
+                    if (context.mounted &&
+                        widget.offlineSyncService?.state !=
+                            OfflineSyncState.offline) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'No se pudo desregistrar este dispositivo: $error',
+                          ),
+                        ),
+                      );
+                    }
+                  }
                   await session.clearSession();
                   if (!context.mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(
@@ -274,6 +328,8 @@ class _LoginPageState extends State<LoginPage> {
                         productRepository: widget.productRepository,
                         orderRepository: widget.orderRepository,
                         rewardsRepository: widget.rewardsRepository,
+                        notificationCenter: widget.notificationCenter,
+                        offlineSyncService: widget.offlineSyncService,
                         settingsRepository: widget.settingsRepository,
                         paymentService: widget.paymentService,
                       ),
@@ -287,8 +343,27 @@ class _LoginPageState extends State<LoginPage> {
                 getDashboard: widget.getAdministratorDashboard,
                 productRepository: widget.productRepository,
                 orderRepository: widget.orderRepository,
+                notificationCenter: widget.notificationCenter,
+                offlineSyncService: widget.offlineSyncService,
                 onLogout: (context) async {
                   final session = await SessionManager.getInstance();
+                  try {
+                    await widget.notificationCenter?.endAuthenticatedSession();
+                  } on NetworkUnavailableException {
+                    // The local session can be cleared without contacting the server.
+                  } catch (error) {
+                    if (context.mounted &&
+                        widget.offlineSyncService?.state !=
+                            OfflineSyncState.offline) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'No se pudo desregistrar este dispositivo: $error',
+                          ),
+                        ),
+                      );
+                    }
+                  }
                   await session.clearSession();
                   if (!context.mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(
@@ -301,6 +376,8 @@ class _LoginPageState extends State<LoginPage> {
                             widget.getAdministratorDashboard,
                         productRepository: widget.productRepository,
                         orderRepository: widget.orderRepository,
+                        notificationCenter: widget.notificationCenter,
+                        offlineSyncService: widget.offlineSyncService,
                         rewardsRepository: widget.rewardsRepository,
                         settingsRepository: widget.settingsRepository,
                       ),

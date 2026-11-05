@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../core/offline/offline_sync_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/auth_user.dart';
 import '../../domain/entities/order.dart';
@@ -11,10 +15,12 @@ class CustomerOrdersPage extends StatefulWidget {
     super.key,
     required this.user,
     required this.orderRepository,
+    this.offlineSyncService,
   });
 
   final AuthUser user;
   final OrderRepository orderRepository;
+  final OfflineSyncService? offlineSyncService;
 
   @override
   State<CustomerOrdersPage> createState() => _CustomerOrdersPageState();
@@ -24,7 +30,22 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage> {
   @override
   void initState() {
     super.initState();
+    final repository = widget.orderRepository;
+    if (repository case final Listenable listenable) {
+      listenable.addListener(_onOrdersChanged);
+    }
+    widget.offlineSyncService?.addListener(_onSyncStateChanged);
     _loadOrders();
+  }
+
+  void _onOrdersChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onSyncStateChanged() {
+    if (widget.offlineSyncService?.state == OfflineSyncState.synchronized) {
+      unawaited(_loadOrders());
+    }
   }
 
   Future<void> _loadOrders() async {
@@ -48,6 +69,16 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage> {
 
   List<CustomerOrder> get _pastOrders =>
       _userOrders.where((order) => order.status == 'delivered').toList();
+
+  @override
+  void dispose() {
+    final repository = widget.orderRepository;
+    if (repository case final Listenable listenable) {
+      listenable.removeListener(_onOrdersChanged);
+    }
+    widget.offlineSyncService?.removeListener(_onSyncStateChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +164,7 @@ class _OrderCard extends StatelessWidget {
   final CustomerOrder order;
 
   Color get _statusColor {
+    if (order.status == 'offline_pending') return Colors.deepOrange;
     if (order.status == 'pending_payment' &&
         order.paymentStatus.toLowerCase() == 'pending') {
       return Colors.orange;
@@ -164,6 +196,9 @@ class _OrderCard extends StatelessWidget {
   }
 
   String get _statusLabel {
+    if (order.status == 'offline_pending') {
+      return 'PENDIENTE DE SINCRONIZAR';
+    }
     if (order.status == 'pending_payment' &&
         order.paymentStatus.toLowerCase() == 'pending') {
       return 'PAGO PENDIENTE';
@@ -259,6 +294,36 @@ class _OrderCard extends StatelessWidget {
                     color: Color(0xFF2E7D32),
                     fontSize: 12,
                   ),
+                ),
+              ],
+              if (order.status == 'offline_pending') ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Se enviará al servidor cuando vuelva la conexión. El pedido aún no está confirmado ni pagado.',
+                  style: TextStyle(color: Color(0xFF8A5A00), fontSize: 12),
+                ),
+              ],
+              if (order.checkoutUrl != null &&
+                  order.paymentStatus.toLowerCase() == 'pending') ...[
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.tryParse(order.checkoutUrl!);
+                    if (uri == null ||
+                        !await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        )) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No se pudo abrir Stripe Checkout.'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.payment),
+                  label: const Text('Continuar al pago'),
                 ),
               ],
             ],
