@@ -42,4 +42,16 @@ void main() {
     expect(ApiConfig.resolveImageUrl(externalUrl), externalUrl);
     expect(ApiConfig.imageUrlForStorage(externalUrl), externalUrl);
   });
+
+  test('loads stored product uploads through the current HTTPS backend', () {
+    ApiConfig.setBaseUrl('https://restaurant.example.test');
+    const path = '/uploads/product-images/item.jpg';
+    for (final host in ['localhost', '10.0.2.2', '192.168.1.20']) {
+      expect(
+        ApiConfig.resolveImageUrl('http://$host:5454$path?v=2'),
+        'https://restaurant.example.test$path?v=2',
+      );
+      expect(ApiConfig.imageUrlForStorage('http://$host:5454$path'), path);
+    }
+  });
 }

@@ -49,7 +49,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Abrir notificaciones
-        await tester.tap(find.byIcon(Icons.notifications_active_rounded));
+        await tester.tap(find.byIcon(Icons.notifications_none_rounded));
         await tester.pumpAndSettle();
         expect(find.text('Notificaciones'), findsOneWidget);
       },

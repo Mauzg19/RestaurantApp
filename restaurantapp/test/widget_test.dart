@@ -39,16 +39,17 @@ void main() {
   testWidgets('muestra el formulario de inicio de sesión', (tester) async {
     await tester.pumpWidget(buildSubject());
 
-    expect(find.text('Bienvenido de nuevo'), findsOneWidget);
-    expect(find.text('Correo electrónico'), findsOneWidget);
-    expect(find.text('Contraseña'), findsOneWidget);
-    expect(find.text('INICIAR SESIÓN'), findsOneWidget);
+    expect(find.text('CORREO'), findsOneWidget);
+    expect(find.text('CONTRASEÑA'), findsOneWidget);
+    expect(find.text('ENTRAR'), findsOneWidget);
   });
 
   testWidgets('valida los campos obligatorios antes de enviar', (tester) async {
     await tester.pumpWidget(buildSubject());
 
-    await tester.tap(find.text('INICIAR SESIÓN'));
+    final submit = find.text('ENTRAR');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
     await tester.pump();
 
     expect(find.text('Escribe un correo válido'), findsOneWidget);
@@ -65,10 +66,10 @@ void main() {
       ),
     );
 
-    expect(find.text('Crear una cuenta'), findsOneWidget);
-    expect(find.text('Nombre completo'), findsOneWidget);
-    expect(find.text('Correo electrónico'), findsOneWidget);
-    expect(find.text('Contraseña'), findsOneWidget);
+    expect(find.text('NOMBRE COMPLETO'), findsOneWidget);
+    expect(find.text('CORREO'), findsOneWidget);
+    expect(find.text('CONTRASEÑA'), findsOneWidget);
+    expect(find.text('CREAR CUENTA'), findsOneWidget);
     expect(find.text('Administrador'), findsNothing);
   });
 

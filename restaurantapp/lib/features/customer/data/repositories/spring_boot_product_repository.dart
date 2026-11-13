@@ -30,6 +30,11 @@ class SpringBootProductRepository implements ProductRepository {
 
   int? get restaurantId => _restaurantId;
 
+  int? restaurantIdForProduct(String productId) {
+    final restaurant = _rawFoods[productId]?['restaurant'];
+    return restaurant is Map ? _asInt(restaurant['id']) : null;
+  }
+
   @override
   List<Product> getProducts() => List.unmodifiable(_products);
 

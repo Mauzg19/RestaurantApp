@@ -27,64 +27,78 @@ void main() {
     },
   );
 
-  test(
-    'creates checkout with item quantities and refreshes the backend status',
-    () async {
-      final client = _FakeHttpClient();
-      final repository = SpringBootOrderRepository(
-        httpClient: client,
-        restaurantId: 7,
-        isAdministrator: () => false,
-      );
-      final order = CustomerOrder(
-        id: 'local-id',
-        clientRequestId: 'request-id',
-        customerName: 'Ana',
-        customerEmail: 'ana@example.com',
-        items: const [
-          CustomerOrderItem(
-            productId: '13',
-            name: 'Arepa',
-            quantity: 3,
-            unitPrice: 15000,
-            notes: 'Sin salsa',
-          ),
-        ],
-        deliveryAddress: const Address(
-          street: 'Calle 1',
-          city: 'Bogotá',
-          postalCode: '110111',
+  test('creates checkout after the restaurant loads and refreshes the backend status', () async {
+    final client = _FakeHttpClient();
+    int? restaurantId;
+    final repository = SpringBootOrderRepository(
+      httpClient: client,
+      restaurantId: null,
+      restaurantIdProvider: () => restaurantId,
+      isAdministrator: () => false,
+    );
+    final order = CustomerOrder(
+      id: 'local-id',
+      clientRequestId: 'request-id',
+      customerName: 'Ana',
+      customerEmail: 'ana@example.com',
+      items: const [
+        CustomerOrderItem(
+          productId: '13',
+          name: 'Arepa',
+          quantity: 3,
+          unitPrice: 15000,
+          notes: 'Sin salsa',
         ),
-        paymentMethod: const PaymentMethod(type: 'Stripe', details: ''),
-      );
+      ],
+      deliveryAddress: const Address(
+        street: 'Calle 1',
+        city: 'Bogotá',
+        postalCode: '110111',
+      ),
+      paymentMethod: const PaymentMethod(type: 'Stripe', details: ''),
+    );
 
-      final checkoutUrl = await repository.saveOrder(order);
+    restaurantId = 7;
+    final checkoutUrl = await repository.saveOrder(order);
 
-      expect(checkoutUrl, 'https://checkout.stripe.test/session');
-      expect(client.postedUrl, ApiConfig.createOrderUrl);
-      expect(client.postedBody?['clientRequestId'], 'request-id');
-      expect(client.postedBody?['items'], [
-        {'menuItemId': 13, 'quantity': 3, 'notes': 'Sin salsa'},
-      ]);
-      expect(client.putCount, 0);
-      expect(repository.getOrders().single.id, '81');
-      expect(repository.getOrders().single.paymentStatus, 'pending');
+    expect(checkoutUrl, 'https://checkout.stripe.test/session');
+    expect(client.postedUrl, ApiConfig.createOrderUrl);
+    expect(client.postedBody?['clientRequestId'], 'request-id');
+    expect(client.postedBody?['restaurantId'], 7);
+    expect(client.postedBody?['items'], [
+      {'menuItemId': 13, 'quantity': 3, 'notes': 'Sin salsa'},
+    ]);
+    expect(client.putCount, 0);
+    expect(repository.getOrders().single.id, '81');
+    expect(repository.getOrders().single.paymentStatus, 'pending');
 
-      client.getResponse = {
-        'order_id': 81,
-        'checkout_session_id': 'cs_test_81',
-        'payment_status': 'PAID',
-        'order_status': 'PENDING',
-      };
-      final updated = await repository.refreshPaymentStatus('81');
+    client.getResponse = [
+      {
+        'id': 81,
+        'clientRequestId': 'request-id',
+        'orderStatus': 'PENDING_PAYMENT',
+        'paymentStatus': 'PENDING',
+        'payment': {'stripeCheckoutSessionId': 'cs_test_81'},
+        'customer': {'email': 'ana@example.com'},
+      },
+    ];
+    await repository.load();
+    expect(repository.getOrders().single.checkoutUrl, checkoutUrl);
 
-      expect(client.getUrl, ApiConfig.paymentStatusUrl('81'));
-      expect(client.getTimeout, const Duration(seconds: 30));
-      expect(updated?.paymentStatus, 'paid');
-      expect(updated?.status, 'pending');
-      expect(updated?.paymentIntentId, 'cs_test_81');
-    },
-  );
+    client.getResponse = {
+      'order_id': 81,
+      'checkout_session_id': 'cs_test_81',
+      'payment_status': 'PAID',
+      'order_status': 'PENDING',
+    };
+    final updated = await repository.refreshPaymentStatus('81');
+
+    expect(client.getUrl, ApiConfig.paymentStatusUrl('81'));
+    expect(client.getTimeout, const Duration(seconds: 30));
+    expect(updated?.paymentStatus, 'paid');
+    expect(updated?.status, 'pending');
+    expect(updated?.paymentIntentId, 'cs_test_81');
+  });
 }
 
 class _FakeHttpClient extends HttpClientService {

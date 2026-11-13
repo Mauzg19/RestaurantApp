@@ -338,7 +338,6 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
     final price = TextEditingController(
       text: product?.price.round().toString() ?? '',
     );
-    final stock = TextEditingController(text: product?.stock.toString() ?? '');
     String? imagePath = product?.imagePath;
     Uint8List? imageBytes;
     String? imageFileName;
@@ -402,13 +401,6 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
                       labelText: 'Precio en COP (sin separadores)',
                     ),
                     validator: _currencyAmount,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: stock,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Stock'),
-                    validator: _integer,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -481,7 +473,7 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
                     name: name.text.trim(),
                     category: category.name,
                     price: double.parse(price.text.replaceAll(',', '.')),
-                    stock: int.parse(stock.text),
+                    stock: product?.stock,
                     isAvailable: product?.isAvailable ?? true,
                     imagePath: imagePath,
                   ),
@@ -501,7 +493,6 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
     await Future<void>.delayed(const Duration(milliseconds: 250));
     name.dispose();
     price.dispose();
-    stock.dispose();
     if (result == null) return;
 
     final categoryValue = _categoryFromLabel(result.category);
@@ -570,11 +561,6 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
   static String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'Campo obligatorio' : null;
 
-  static String? _integer(String? value) =>
-      value == null || int.tryParse(value) == null
-      ? 'Escribe un stock válido'
-      : null;
-
   static String? _currencyAmount(String? value) =>
       value == null || int.tryParse(value.trim()) == null
       ? 'Escribe un importe entero en COP'
@@ -629,7 +615,15 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
               onDelete: _deleteProduct,
               onAvailabilityChanged: _updateAvailability,
             ),
-            const SizedBox.expand(),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'La predicción de categoría está disponible en el panel web.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
             _ProfileTab(
               user: widget.user,
               onLogout: widget.onLogout != null
@@ -973,7 +967,7 @@ class _InventoryTab extends StatelessWidget {
             const Expanded(
               child: _PageTitle(
                 title: 'Inventario',
-                subtitle: 'Administra productos, precios y existencias.',
+                subtitle: 'Administra productos, precios y disponibilidad.',
               ),
             ),
             IconButton(
@@ -1547,7 +1541,8 @@ class _InventoryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLowStock = item.stock <= 7;
+    final stock = item.stock;
+    final isLowStock = stock != null && stock <= 7;
     final (stockColor, stockBg) = !item.isAvailable
         ? (const Color(0xFFB3261E), const Color(0xFFFEE2E2))
         : isLowStock
@@ -1558,7 +1553,7 @@ class _InventoryItem extends StatelessWidget {
         ? 'Agotado'
         : isLowStock
         ? 'Reponer pronto'
-        : 'Normal';
+        : 'Disponible';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1614,14 +1609,15 @@ class _InventoryItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Stock: ${item.stock}',
-                    style: AppTheme.serif(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: stockColor,
+                  if (stock != null)
+                    Text(
+                      'Stock: $stock',
+                      style: AppTheme.serif(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: stockColor,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 2),
                   Container(
                     padding: const EdgeInsets.symmetric(

@@ -66,6 +66,7 @@ Future<void> main() async {
     httpClient: httpClient,
     restaurantId: productRepository.restaurantId,
     restaurantIdProvider: () => productRepository.restaurantId,
+    restaurantIdForProduct: productRepository.restaurantIdForProduct,
     isAdministrator: () =>
         sessionManager.getCurrentUser()?.role == AuthRole.administrator,
     offlineDatabase: offlineDatabase,

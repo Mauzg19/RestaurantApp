@@ -98,7 +98,7 @@ class DashboardMenuItem {
   final String id;
   final String name;
   final String category;
-  final int stock;
+  final int? stock;
   final bool isAvailable;
   final double price;
   final String? imagePath;
