@@ -60,6 +60,7 @@ Future<void> main() async {
     httpClient: httpClient,
     offlineDatabase: offlineDatabase,
     currentOwnerEmail: () => sessionManager.getCurrentUser()?.email,
+    isRestaurantOperator: () => sessionManager.getCurrentUser()?.role.canOperateRestaurant ?? false,
     serverReachable: () => offlineSyncService.isOnline,
   );
   final orderRepository = SpringBootOrderRepository(
@@ -68,7 +69,7 @@ Future<void> main() async {
     restaurantIdProvider: () => productRepository.restaurantId,
     restaurantIdForProduct: productRepository.restaurantIdForProduct,
     isAdministrator: () =>
-        sessionManager.getCurrentUser()?.role == AuthRole.administrator,
+        sessionManager.getCurrentUser()?.role.canOperateRestaurant ?? false,
     offlineDatabase: offlineDatabase,
     currentOwnerEmail: () => sessionManager.getCurrentUser()?.email,
   );

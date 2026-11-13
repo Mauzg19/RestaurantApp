@@ -15,12 +15,14 @@ class SpringBootProductRepository implements ProductRepository {
     required this.httpClient,
     this.offlineDatabase,
     this.currentOwnerEmail,
+    this.isRestaurantOperator,
     this.serverReachable,
   });
 
   final HttpClientService httpClient;
   final OfflineDatabase? offlineDatabase;
   final String? Function()? currentOwnerEmail;
+  final bool Function()? isRestaurantOperator;
   final bool Function()? serverReachable;
   final List<Product> _products = [];
   final Map<String, Map<String, dynamic>> _rawFoods = {};
@@ -91,11 +93,23 @@ class SpringBootProductRepository implements ProductRepository {
   Future<void> load() async {
     await _loadCachedProducts();
     try {
-      final restaurants = await httpClient.get(ApiConfig.restaurantsUrl);
-      if (restaurants is List && restaurants.isNotEmpty) {
-        final firstRestaurant = restaurants.first;
-        if (firstRestaurant is Map) {
-          _restaurantId = _asInt(firstRestaurant['id']);
+      final scoped = isRestaurantOperator?.call() == true;
+      if (scoped) {
+        final own = await httpClient.get('${ApiConfig.baseUrl}/api/admin/restaurants/user');
+        _restaurantId = own is Map ? _asInt(own['id']) : null;
+        _categoryIds.clear();
+        _categories.clear();
+        if (_restaurantId == null) {
+          _setProducts(const []);
+          return;
+        }
+      } else {
+        final restaurants = await httpClient.get(ApiConfig.restaurantsUrl);
+        if (restaurants is List && restaurants.isNotEmpty) {
+          final firstRestaurant = restaurants.first;
+          if (firstRestaurant is Map) {
+            _restaurantId = _asInt(firstRestaurant['id']);
+          }
         }
       }
 
@@ -106,7 +120,10 @@ class SpringBootProductRepository implements ProductRepository {
         );
       }
 
-      final remoteFoods = response.whereType<Map>().map((row) {
+      final remoteFoods = response.whereType<Map>().where((row) {
+        final restaurant = row['restaurant'];
+        return !scoped || (restaurant is Map && _asInt(restaurant['id']) == _restaurantId);
+      }).map((row) {
         final food = Map<String, dynamic>.from(row);
         final id = food['id']?.toString();
         if (id == null || id.isEmpty) {
@@ -363,7 +380,7 @@ class SpringBootProductRepository implements ProductRepository {
       scope: 'products',
       ownerEmail: _owner,
     );
-    if (cached.isEmpty && _owner != 'public') {
+    if (cached.isEmpty && _owner != 'public' && isRestaurantOperator?.call() != true) {
       cached = await database.readRecords(
         scope: 'products',
         ownerEmail: 'public',
@@ -395,7 +412,7 @@ class SpringBootProductRepository implements ProductRepository {
       scope: 'categories',
       ownerEmail: _owner,
     );
-    if (rows.isEmpty && _owner != 'public') {
+    if (rows.isEmpty && _owner != 'public' && isRestaurantOperator?.call() != true) {
       rows = await database.readRecords(
         scope: 'categories',
         ownerEmail: 'public',

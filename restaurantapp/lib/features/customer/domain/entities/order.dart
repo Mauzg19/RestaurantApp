@@ -4,12 +4,14 @@ class Address {
     required this.city,
     required this.postalCode,
     this.notes,
+    this.id,
   });
 
   final String street;
   final String city;
   final String postalCode;
   final String? notes;
+  final int? id;
 
   String get fullAddress =>
       '$street, $city, $postalCode${notes != null ? " ($notes)" : ""}';
@@ -19,6 +21,7 @@ class Address {
     'city': city,
     'postal_code': postalCode,
     'notes': notes,
+    if (id != null) 'id': id,
   };
 
   factory Address.fromJson(Map<String, dynamic> json) => Address(
@@ -26,6 +29,7 @@ class Address {
     city: json['city'] as String,
     postalCode: json['postal_code'] as String,
     notes: json['notes'] as String?,
+    id: json['id'] as int?,
   );
 
   @override

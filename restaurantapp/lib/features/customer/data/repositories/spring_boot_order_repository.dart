@@ -48,9 +48,15 @@ class SpringBootOrderRepository extends ChangeNotifier
     await _loadCachedOrders();
     if (_orders.isNotEmpty) notifyListeners();
     try {
-      final url = isAdministrator()
-          ? '${ApiConfig.baseUrl}/api/admin/order/restaurant/'
-                '${_activeRestaurantId ?? (throw StateError('No se encontró el restaurante asociado al backend.'))}'
+      final admin = isAdministrator();
+      final restaurant = _activeRestaurantId;
+      if (admin && restaurant == null) {
+        _orders.clear();
+        notifyListeners();
+        return;
+      }
+      final url = admin
+          ? '${ApiConfig.baseUrl}/api/admin/order/restaurant/$restaurant'
           : '${ApiConfig.ordersUrl}/user';
       final response = await httpClient.get(url);
       if (response is! List) {

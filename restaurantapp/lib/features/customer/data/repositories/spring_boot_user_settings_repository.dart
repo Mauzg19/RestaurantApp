@@ -35,7 +35,8 @@ class SpringBootUserSettingsRepository implements UserSettingsRepository {
         );
       }
       final addresses = response['addresses'];
-      if (addresses is! List || addresses.isEmpty || addresses.last is! Map) {
+      final addressesById = addresses is List ? addresses.whereType<Map>().toList() : <Map>[];
+      if (addressesById.isEmpty) {
         await database?.deleteRecord(
           scope: 'settings',
           ownerEmail: email,
@@ -43,9 +44,8 @@ class SpringBootUserSettingsRepository implements UserSettingsRepository {
         );
         return null;
       }
-      final address = _addressFromBackend(
-        Map<String, dynamic>.from(addresses.last as Map),
-      );
+      addressesById.sort((a, b) => ((a['id'] as int?) ?? 0).compareTo((b['id'] as int?) ?? 0));
+      final address = _addressFromBackend(Map<String, dynamic>.from(addressesById.last));
       await _cache(email, 'delivery-address', address.toJson());
       return address;
     } on NetworkUnavailableException {
@@ -57,17 +57,18 @@ class SpringBootUserSettingsRepository implements UserSettingsRepository {
 
   @override
   Future<void> saveDeliveryAddress(String email, Address address) async {
-      final operationId = OfflineDatabase.newOperationId();
-      final body = {
-        'street': address.street,
-        'city': address.city,
-        'postalCode': address.postalCode,
-        'notes': address.notes,
-        'clientOperationId': operationId,
-      };
+    final operationId = OfflineDatabase.newOperationId();
+    final body = {
+      'street': address.street,
+      'city': address.city,
+      'postalCode': address.postalCode,
+      'notes': address.notes,
+      'clientOperationId': operationId,
+      if (address.id != null) 'id': address.id,
+    };
     try {
-      await httpClient.post(ApiConfig.deliveryAddressUrl, body: body);
-      await _cache(email, 'delivery-address', address.toJson());
+      final saved = await _saveAddress(body);
+      await _cache(email, 'delivery-address', saved.toJson());
     } on NetworkUnavailableException {
       final database = offlineDatabase;
       if (database == null) rethrow;
@@ -124,10 +125,8 @@ class SpringBootUserSettingsRepository implements UserSettingsRepository {
       await database.markOperationInFlight(operation.id);
       try {
         if (operation.entityId == 'delivery-address') {
-          await httpClient.post(
-            ApiConfig.deliveryAddressUrl,
-            body: operation.payload,
-          );
+          final saved = await _saveAddress(operation.payload);
+          await _cache(email, 'delivery-address', saved.toJson());
         } else {
           throw StateError('Tipo de preferencia offline desconocido.');
         }
@@ -175,7 +174,16 @@ class SpringBootUserSettingsRepository implements UserSettingsRepository {
     return null;
   }
 
+  Future<Address> _saveAddress(Map<String, dynamic> body) async {
+    final id = body['id'];
+    final response = id == null
+        ? await httpClient.post(ApiConfig.deliveryAddressUrl, body: body)
+        : await httpClient.put('${ApiConfig.deliveryAddressUrl}/$id', body: body);
+    return _addressFromBackend(Map<String, dynamic>.from(response as Map));
+  }
+
   Address _addressFromBackend(Map<String, dynamic> json) => Address(
+        id: json['id'] as int?,
         street:
             json['streetAddress']?.toString() ??
             json['street']?.toString() ??
