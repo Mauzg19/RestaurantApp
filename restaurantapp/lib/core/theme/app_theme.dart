@@ -90,6 +90,20 @@ abstract final class AppTheme {
     );
   }
 
+  static TextStyle numeric({
+    double fontSize = 13,
+    FontWeight fontWeight = FontWeight.w400,
+    Color color = offBlack,
+  }) {
+    return TextStyle(
+      fontFamily: 'sans-serif',
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      letterSpacing: 0,
+    );
+  }
+
   // --- Shape & Radius Tokens ---
   static const double radiusTag = 9999;
   static const double radiusPill = 100;

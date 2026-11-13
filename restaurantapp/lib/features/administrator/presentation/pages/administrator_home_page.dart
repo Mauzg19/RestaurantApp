@@ -443,11 +443,13 @@ class _AdministratorHomePageState extends State<AdministratorHomePage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          imagePath == null ? 'Sin foto' : 'Foto seleccionada',
+                          imagePath == null && imageBytes == null
+                              ? 'Sin foto'
+                              : 'Foto seleccionada',
                           overflow: TextOverflow.ellipsis,
                           style: AppTheme.mono(
                             fontSize: 12,
-                            color: imagePath == null
+                            color: imagePath == null && imageBytes == null
                                 ? AppTheme.smoke
                                 : AppTheme.lakeBlue,
                           ),
@@ -1346,7 +1348,7 @@ class _MetricCard extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     metric.value,
-                    style: AppTheme.serif(
+                    style: AppTheme.numeric(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.offBlack,
@@ -1404,7 +1406,7 @@ class _OrderCard extends StatelessWidget {
             children: [
               Text(
                 order.id,
-                style: AppTheme.serif(
+                style: AppTheme.numeric(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.lakeBlue,
@@ -1472,7 +1474,7 @@ class _OrderCard extends StatelessWidget {
                     const SizedBox(width: 3),
                     Text(
                       order.time,
-                      style: AppTheme.serif(
+                      style: AppTheme.numeric(
                         fontSize: 11,
                         color: AppTheme.smoke,
                       ),
@@ -1488,7 +1490,7 @@ class _OrderCard extends StatelessWidget {
                       child: Text(
                         formatCop(order.total),
                         overflow: TextOverflow.ellipsis,
-                        style: AppTheme.serif(
+                        style: AppTheme.numeric(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: AppTheme.offBlack,

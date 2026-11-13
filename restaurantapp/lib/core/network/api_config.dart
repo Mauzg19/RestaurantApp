@@ -29,6 +29,42 @@ class ApiConfig {
     }
   }
 
+  static String resolveImageUrl(String imageUrl) {
+    final imageUri = Uri.parse(imageUrl);
+    final baseUri = Uri.parse(_baseUrl);
+    if (!imageUri.hasScheme) {
+      return baseUri.resolveUri(imageUri).toString();
+    }
+    if (_isLoopbackHost(imageUri.host)) {
+      return imageUri
+          .replace(
+            scheme: baseUri.scheme,
+            host: baseUri.host,
+            port: baseUri.hasPort ? baseUri.port : null,
+          )
+          .toString();
+    }
+    return imageUri.toString();
+  }
+
+  static String imageUrlForStorage(String imageUrl) {
+    final imageUri = Uri.tryParse(imageUrl);
+    if (imageUri == null || !imageUri.hasScheme) return imageUrl;
+
+    final baseUri = Uri.parse(_baseUrl);
+    final isBackendUrl =
+        (imageUri.host == baseUri.host && imageUri.port == baseUri.port) ||
+        _isLoopbackHost(imageUri.host);
+    if (!isBackendUrl) return imageUrl;
+
+    return '${imageUri.path}'
+        '${imageUri.hasQuery ? '?${imageUri.query}' : ''}'
+        '${imageUri.hasFragment ? '#${imageUri.fragment}' : ''}';
+  }
+
+  static bool _isLoopbackHost(String host) =>
+      host == 'localhost' || host == '127.0.0.1' || host == '::1';
+
   // Rutas de autenticación
   static String get signinUrl => '$baseUrl/auth/signin';
   static String get signupUrl => '$baseUrl/auth/signup';

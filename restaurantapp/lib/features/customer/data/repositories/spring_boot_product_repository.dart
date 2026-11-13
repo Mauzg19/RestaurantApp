@@ -241,7 +241,9 @@ class SpringBootProductRepository implements ProductRepository {
       final database = offlineDatabase;
       if (database == null) rethrow;
       if (isCreate && clientOperationId == null) {
-        throw StateError('No se pudo asignar una clave idempotente al producto.');
+        throw StateError(
+          'No se pudo asignar una clave idempotente al producto.',
+        );
       }
       final localFood = _localFood(
         product,
@@ -398,7 +400,8 @@ class SpringBootProductRepository implements ProductRepository {
     _setCategories(rows.map((row) => Map<String, dynamic>.from(row)));
   }
 
-  String get _owner => currentOwnerEmail?.call()?.trim().toLowerCase() ?? 'public';
+  String get _owner =>
+      currentOwnerEmail?.call()?.trim().toLowerCase() ?? 'public';
 
   @override
   Future<void> updateProductAvailability(
@@ -424,9 +427,8 @@ class SpringBootProductRepository implements ProductRepository {
       final database = offlineDatabase;
       if (database == null) rethrow;
       final isOfflineProduct = existing['_offline'] == true;
-      final updatedProduct = _toProduct(existing).copyWith(
-        isAvailable: isAvailable,
-      );
+      final updatedProduct = _toProduct(existing)
+          .copyWith(isAvailable: isAvailable);
       final category = existing['foodCategory'] is Map
           ? Map<String, dynamic>.from(existing['foodCategory'] as Map)
           : const <String, dynamic>{};
@@ -532,9 +534,7 @@ class SpringBootProductRepository implements ProductRepository {
         'El backend devolvió una URL de imagen inválida.',
       );
     }
-    final imageUrl = Uri.parse(ApiConfig.baseUrl)
-        .resolve(response['url'] as String)
-        .toString();
+    final imageUrl = ApiConfig.resolveImageUrl(response['url'] as String);
     final food = _rawFoods[productId];
     if (food != null) {
       food['images'] = [imageUrl];
@@ -572,9 +572,7 @@ class SpringBootProductRepository implements ProductRepository {
           final raw = _rawFoods[serverId];
           if (raw != null) {
             raw['images'] = [
-              Uri.parse(ApiConfig.baseUrl)
-                  .resolve(response['url'] as String)
-                  .toString(),
+              ApiConfig.resolveImageUrl(response['url'] as String),
             ];
             await _upsertRawFood(raw);
           }
@@ -687,7 +685,7 @@ class SpringBootProductRepository implements ProductRepository {
       icon: productCategory.icon,
       accentColor: const Color(0xFFC95D32),
       isAvailable: food['available'] == true,
-      imagePath: image,
+      imagePath: image == null ? null : ApiConfig.resolveImageUrl(image),
       description: food['description']?.toString(),
     );
   }
@@ -708,7 +706,7 @@ class SpringBootProductRepository implements ProductRepository {
     if (image == null || image.isEmpty) return const [];
     final scheme = Uri.tryParse(image)?.scheme;
     if (scheme != 'http' && scheme != 'https') return const [];
-    return [image];
+    return [ApiConfig.imageUrlForStorage(image)];
   }
 
   int? _asInt(dynamic value) =>

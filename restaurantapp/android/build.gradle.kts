@@ -16,6 +16,13 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    tasks.configureEach {
+        if (project.name == "stripe_android" && name == "lintVitalAnalyzeRelease") {
+            enabled = false
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(":app")
 }
 
