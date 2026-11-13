@@ -79,7 +79,9 @@ void main() {
     expect(find.text('Listo'), findsOneWidget);
   });
 
-  testWidgets('conserva vacía la sección de predicción IA', (tester) async {
+  testWidgets('indica dónde está disponible la predicción de categoría', (
+    tester,
+  ) async {
     await tester.pumpWidget(buildSubject());
 
     await tester.tap(find.text('Predicción IA'));
@@ -90,8 +92,7 @@ void main() {
       3,
     );
     expect(find.text('Predicción IA'), findsOneWidget);
-    expect(find.textContaining('Weka'), findsNothing);
-    expect(find.textContaining('predicción generada'), findsNothing);
+    expect(find.textContaining('disponible en el panel web'), findsOneWidget);
   });
 
   testWidgets('filtra pedidos y permite crear un producto en inventario', (
@@ -118,7 +119,6 @@ void main() {
     await tester.tap(find.text('Bowls').last);
     await tester.pumpAndSettle();
     await tester.enterText(formFields.at(1), '7500');
-    await tester.enterText(formFields.at(2), '20');
     final saveButton = find.text('Guardar');
     await tester.ensureVisible(saveButton);
     await tester.tap(saveButton);

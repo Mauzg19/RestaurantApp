@@ -138,7 +138,7 @@ class AdministratorRepositoryImpl implements AdministratorRepository {
     id: product.id,
     name: product.name,
     category: product.categoryName ?? product.category.label,
-    stock: 20,
+    stock: null,
     isAvailable: product.isAvailable,
     price: product.price,
     imagePath: product.imagePath,

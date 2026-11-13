@@ -35,14 +35,8 @@ class ApiConfig {
     if (!imageUri.hasScheme) {
       return baseUri.resolveUri(imageUri).toString();
     }
-    if (_isLoopbackHost(imageUri.host)) {
-      return imageUri
-          .replace(
-            scheme: baseUri.scheme,
-            host: baseUri.host,
-            port: baseUri.hasPort ? baseUri.port : null,
-          )
-          .toString();
+    if (_isProductUpload(imageUri) || _isLoopbackHost(imageUri.host)) {
+      return baseUri.resolve(_pathAndQuery(imageUri)).toString();
     }
     return imageUri.toString();
   }
@@ -54,13 +48,19 @@ class ApiConfig {
     final baseUri = Uri.parse(_baseUrl);
     final isBackendUrl =
         (imageUri.host == baseUri.host && imageUri.port == baseUri.port) ||
-        _isLoopbackHost(imageUri.host);
+        _isLoopbackHost(imageUri.host) ||
+        _isProductUpload(imageUri);
     if (!isBackendUrl) return imageUrl;
-
-    return '${imageUri.path}'
-        '${imageUri.hasQuery ? '?${imageUri.query}' : ''}'
-        '${imageUri.hasFragment ? '#${imageUri.fragment}' : ''}';
+    return _pathAndQuery(imageUri);
   }
+
+  static bool _isProductUpload(Uri uri) =>
+      (uri.scheme == 'http' || uri.scheme == 'https') &&
+      uri.path.startsWith('/uploads/product-images/');
+
+  static String _pathAndQuery(Uri uri) =>
+      '${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}'
+      '${uri.hasFragment ? '#${uri.fragment}' : ''}';
 
   static bool _isLoopbackHost(String host) =>
       host == 'localhost' || host == '127.0.0.1' || host == '::1';

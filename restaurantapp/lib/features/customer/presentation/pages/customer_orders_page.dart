@@ -213,7 +213,13 @@ class _OrderCard extends StatelessWidget {
       case 'cancelled':
         return 'CANCELADO';
       default:
-        return order.status.toUpperCase();
+        return switch (order.status.toLowerCase()) {
+          'preparing' => 'Preparando',
+          'ready' => 'Listo',
+          'out_for_delivery' => 'En camino',
+          'delivered' || 'completed' => 'Entregado',
+          _ => order.status,
+        };
     }
   }
 

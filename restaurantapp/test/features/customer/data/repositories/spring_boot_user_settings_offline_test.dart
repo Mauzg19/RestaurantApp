@@ -74,6 +74,12 @@ class _FakeHttpClient extends HttpClientService {
     if (offline) throw const NetworkUnavailableException();
     addressRequests++;
     lastAddressBody = body;
-    return null;
+    return {
+      'id': 42,
+      'streetAddress': body['street'],
+      'city': body['city'],
+      'postalCode': body['postalCode'],
+      'notes': body['notes'],
+    };
   }
 }

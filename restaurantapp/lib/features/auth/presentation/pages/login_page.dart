@@ -17,6 +17,7 @@ import '../../../customer/presentation/pages/customer_home_page.dart';
 import '../../../../core/session/session_manager.dart';
 import '../../../../core/services/biometric_auth_service.dart';
 import '../../../../core/network/http_client_service.dart';
+import '../../../../core/network/api_config.dart';
 import '../../../../core/offline/offline_sync_service.dart';
 import '../../../notifications/data/services/notification_center_service.dart';
 import 'register_page.dart';
@@ -286,7 +287,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => signedInUser.role == AuthRole.customer
+        builder: (_) => !signedInUser.role.canOperateRestaurant
             ? CustomerHomePage(
                 user: signedInUser,
                 getProducts: widget.getProducts,
@@ -398,6 +399,52 @@ class _LoginPageState extends State<LoginPage> {
       },
       transitionDuration: const Duration(milliseconds: 300),
     );
+  }
+
+  Future<void> _requestPasswordReset() async {
+    var email = _emailController.text.trim();
+    final form = GlobalKey<FormState>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Recuperar contraseña'),
+        content: Form(
+          key: form,
+          child: TextFormField(
+            initialValue: email,
+            decoration: const InputDecoration(labelText: 'Correo electrónico'),
+            keyboardType: TextInputType.emailAddress,
+            onSaved: (value) => email = value!.trim(),
+            validator: (value) => value?.contains('@') == true ? null : 'Escribe un correo válido',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () {
+              if (!form.currentState!.validate()) return;
+              form.currentState!.save();
+              Navigator.pop(dialogContext, true);
+            },
+            child: const Text('Enviar enlace'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isLoading = true);
+    String feedback;
+    try {
+      final endpoint = Uri.parse('${ApiConfig.baseUrl}/auth/reset-password-request')
+          .replace(queryParameters: {'email': email});
+      await HttpClientService().post(endpoint.toString(), body: {}, requiresAuth: false);
+      feedback = 'Si el correo está registrado, recibirás un enlace para cambiar tu contraseña.';
+    } catch (_) {
+      feedback = 'No se pudo solicitar el enlace. Intenta de nuevo.';
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedback)));
   }
 
   void _showUnavailableAction(String action) {
@@ -529,9 +576,7 @@ class _LoginPageState extends State<LoginPage> {
               child: TextButton(
                 onPressed: _isLoading
                     ? null
-                    : () => _showUnavailableAction(
-                        'La recuperación de contraseña',
-                      ),
+                    : _requestPasswordReset,
                 style: TextButton.styleFrom(
                   foregroundColor: AuthColors.ink,
                   padding: const EdgeInsets.symmetric(vertical: 8),

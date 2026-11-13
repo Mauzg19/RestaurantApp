@@ -96,9 +96,8 @@ class SessionManager {
 
     if (email == null || name == null) return null;
 
-    final role = roleStr == AuthRole.administrator.name
-        ? AuthRole.administrator
-        : AuthRole.customer;
+    final role = AuthRole.values.where((value) => value.name == roleStr).firstOrNull
+        ?? AuthRole.customer;
 
     return AuthUser(
       fullName: name,

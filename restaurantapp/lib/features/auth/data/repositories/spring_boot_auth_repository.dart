@@ -38,9 +38,12 @@ class SpringBootAuthRepository implements AuthRepository {
       }
       final roleString = response['role']?.toString() ?? 'ROLE_CUSTOMER';
 
-      final role = (roleString.contains('ADMIN') || roleString.contains('OWNER'))
-          ? AuthRole.administrator
-          : AuthRole.customer;
+      final role = switch (roleString) {
+        'ROLE_ADMIN' => AuthRole.administrator,
+        'ROLE_RESTAURANT_OWNER' => AuthRole.restaurantOwner,
+        'ROLE_RESTAURANT_MANAGER' => AuthRole.restaurantManager,
+        _ => AuthRole.customer,
+      };
 
       final user = AuthUser(
         fullName: email.split('@').first.toUpperCase(),
@@ -72,15 +75,10 @@ class SpringBootAuthRepository implements AuthRepository {
     required String password,
     required AuthRole role,
   }) async {
-    final backendRole = role == AuthRole.administrator
-        ? 'ROLE_ADMIN'
-        : 'ROLE_CUSTOMER';
-
     final body = {
       'fullName': fullName.trim(),
       'email': email.trim().toLowerCase(),
       'password': password,
-      'role': backendRole,
     };
 
     try {
@@ -97,7 +95,7 @@ class SpringBootAuthRepository implements AuthRepository {
       final user = AuthUser(
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
-        role: role,
+        role: AuthRole.customer,
       );
 
       await sessionManager.saveSession(token: token, user: user);

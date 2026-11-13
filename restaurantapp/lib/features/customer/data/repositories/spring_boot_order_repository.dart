@@ -13,6 +13,7 @@ class SpringBootOrderRepository extends ChangeNotifier
     required this.httpClient,
     required this.restaurantId,
     this.restaurantIdProvider,
+    this.restaurantIdForProduct,
     required this.isAdministrator,
     this.offlineDatabase,
     this.currentOwnerEmail,
@@ -21,6 +22,7 @@ class SpringBootOrderRepository extends ChangeNotifier
   final HttpClientService httpClient;
   final int? restaurantId;
   final int? Function()? restaurantIdProvider;
+  final int? Function(String productId)? restaurantIdForProduct;
   final bool Function() isAdministrator;
   final OfflineDatabase? offlineDatabase;
   final String? Function()? currentOwnerEmail;
@@ -28,6 +30,8 @@ class SpringBootOrderRepository extends ChangeNotifier
 
   @override
   bool get requiresCheckout => true;
+
+  int? get _activeRestaurantId => restaurantIdProvider?.call() ?? restaurantId;
 
   @override
   List<CustomerOrder> getOrders() => List.unmodifiable(_orders);
@@ -44,9 +48,15 @@ class SpringBootOrderRepository extends ChangeNotifier
     await _loadCachedOrders();
     if (_orders.isNotEmpty) notifyListeners();
     try {
-      final url = isAdministrator()
-          ? '${ApiConfig.baseUrl}/api/admin/order/restaurant/'
-                '${restaurantIdProvider?.call() ?? restaurantId ?? (throw StateError('No se encontró el restaurante asociado al backend.'))}'
+      final admin = isAdministrator();
+      final restaurant = _activeRestaurantId;
+      if (admin && restaurant == null) {
+        _orders.clear();
+        notifyListeners();
+        return;
+      }
+      final url = admin
+          ? '${ApiConfig.baseUrl}/api/admin/order/restaurant/$restaurant'
           : '${ApiConfig.ordersUrl}/user';
       final response = await httpClient.get(url);
       if (response is! List) {
@@ -58,6 +68,18 @@ class SpringBootOrderRepository extends ChangeNotifier
           .whereType<Map>()
           .map((row) => _fromBackend(Map<String, dynamic>.from(row)))
           .toList();
+      final previousById = {for (final order in _orders) order.id: order};
+      for (var index = 0; index < remoteOrders.length; index++) {
+        final remote = remoteOrders[index];
+        final previous = previousById[remote.id];
+        if (remote.paymentStatus == 'pending' &&
+            remote.paymentIntentId != null &&
+            previous?.paymentIntentId == remote.paymentIntentId) {
+          remoteOrders[index] = remote.copyWith(
+            checkoutUrl: previous?.checkoutUrl,
+          );
+        }
+      }
       await _mergeCachedPendingOrders(remoteOrders);
       _orders
         ..clear()
@@ -72,12 +94,22 @@ class SpringBootOrderRepository extends ChangeNotifier
 
   @override
   Future<String?> saveOrder(CustomerOrder order) async {
-    final id = restaurantId;
+    final restaurantIds = order.items
+        .map((item) => restaurantIdForProduct?.call(item.productId))
+        .whereType<int>()
+        .toSet();
+    if (restaurantIds.length > 1) {
+      throw StateError(
+        'El pedido debe contener productos de un solo restaurante.',
+      );
+    }
+    final id = restaurantIds.firstOrNull ?? _activeRestaurantId;
     if (id == null) {
       throw StateError('No se encontró un restaurante en la base de datos.');
     }
 
-    final clientRequestId = order.clientRequestId ??
+    final clientRequestId =
+        order.clientRequestId ??
         await CartService().getOrCreateCheckoutRequestId();
     final request = _createRequest(order, id, clientRequestId);
     if (offlineDatabase == null) {
@@ -143,19 +175,19 @@ class SpringBootOrderRepository extends ChangeNotifier
     }).toList();
 
     return {
-        'clientRequestId': clientRequestId,
-        'restaurantId': restaurantId,
-        'deliveryAddress': {
-          'fullName': order.customerName,
-          'streetAddress': order.deliveryAddress.street,
-          'city': order.deliveryAddress.city,
-          'postalCode': order.deliveryAddress.postalCode,
-          'country': 'Colombia',
-          'notes': order.deliveryAddress.notes,
-        },
-        'items': items,
-        'rewardId': order.rewardId,
-      };
+      'clientRequestId': clientRequestId,
+      'restaurantId': restaurantId,
+      'deliveryAddress': {
+        'fullName': order.customerName,
+        'streetAddress': order.deliveryAddress.street,
+        'city': order.deliveryAddress.city,
+        'postalCode': order.deliveryAddress.postalCode,
+        'country': 'Colombia',
+        'notes': order.deliveryAddress.notes,
+      },
+      'items': items,
+      'rewardId': order.rewardId,
+    };
   }
 
   Future<String?> _submitCheckout(
@@ -272,6 +304,7 @@ class SpringBootOrderRepository extends ChangeNotifier
 
     final updated = _orders[index].copyWith(
       paymentStatus: response['payment_status']?.toString().toLowerCase(),
+      checkoutUrl: response['payment_url']?.toString(),
       status: response['order_status']?.toString().toLowerCase(),
       paymentIntentId:
           response['checkout_session_id']?.toString() ??
@@ -326,7 +359,10 @@ class SpringBootOrderRepository extends ChangeNotifier
     if (database == null) return;
     final pending = await database.getPendingOperations(_owner);
     if (pending.isEmpty) return;
-    final cached = await database.readRecords(scope: 'orders', ownerEmail: _owner);
+    final cached = await database.readRecords(
+      scope: 'orders',
+      ownerEmail: _owner,
+    );
     for (final row in cached) {
       final order = CustomerOrder.fromJson(
         Map<String, dynamic>.from(row)..remove('recordId'),
@@ -352,7 +388,10 @@ class SpringBootOrderRepository extends ChangeNotifier
   Future<void> _loadCachedOrders() async {
     final database = offlineDatabase;
     if (database == null) return;
-    final cached = await database.readRecords(scope: 'orders', ownerEmail: _owner);
+    final cached = await database.readRecords(
+      scope: 'orders',
+      ownerEmail: _owner,
+    );
     _orders
       ..clear()
       ..addAll(

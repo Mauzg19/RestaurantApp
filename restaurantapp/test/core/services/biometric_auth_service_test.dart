@@ -4,14 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('BiometricAuthService Tests', () {
     late BiometricAuthService biometricService;
-    late FlutterSecureStorage secureStorage;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      secureStorage = const FlutterSecureStorage();
-      await secureStorage.deleteAll();
+      FlutterSecureStorage.setMockInitialValues({});
       biometricService = BiometricAuthService.instance;
     });
 

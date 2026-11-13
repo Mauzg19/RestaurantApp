@@ -32,6 +32,7 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
   late TextEditingController _paymentTypeController;
   late TextEditingController _paymentDetailsController;
   bool _isSaving = false;
+  int? _addressId;
   bool _biometricEnabled = false;
 
   @override
@@ -54,6 +55,7 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
 
     if (!mounted) return;
     setState(() {
+      _addressId = address?.id;
       _streetController.text = address?.street ?? '';
       _cityController.text = address?.city ?? '';
       _zipController.text = address?.postalCode ?? '';
@@ -86,6 +88,7 @@ class _CustomerDetailsPageState extends State<CustomerDetailsPage> {
     setState(() => _isSaving = true);
 
     final address = Address(
+      id: _addressId,
       street: _streetController.text.trim(),
       city: _cityController.text.trim(),
       postalCode: _zipController.text.trim(),
